@@ -1,0 +1,172 @@
+/* ============================================================
+   NovelPad Studio · Markdown 源码 / 渲染 对比效果图
+   复用 mockup.css 的令牌与基础布局，只覆盖本页差异部分。
+   ============================================================ */
+
+.app.compare {
+  grid-template-columns: 48px 260px minmax(0, 1fr);
+  grid-template-areas:
+    "activity sidebar tabs"
+    "activity sidebar editor"
+    "status   status   status";
+}
+
+/* ---------- 标签页：三态切换 ---------- */
+.tabs .view-switch {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 8px; height: 100%;
+}
+.view-switch button {
+  font-size: 12px; color: var(--fg-muted);
+  padding: 3px 10px; border-radius: 4px;
+}
+.view-switch button:hover { color: var(--fg-ui); background: var(--bg-hover); }
+.view-switch button.active { color: var(--accent); background: var(--accent-soft); }
+.view-switch .sep { width: 1px; height: 14px; background: var(--border); margin: 0 6px; }
+.view-switch .sync-btn { color: var(--fg-faint); }
+.view-switch .sync-btn.active { color: var(--accent); }
+
+/* ---------- 分栏 ---------- */
+.split {
+  grid-area: editor;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+  background: var(--bg-editor);
+}
+.app.compare[data-mode="render"] .split { grid-template-columns: 0 1fr; }
+.app.compare[data-mode="source"] .split { grid-template-columns: 1fr 0; }
+.app.compare[data-mode="render"] .source-pane,
+.app.compare[data-mode="source"] .render-pane { display: none; }
+
+.pane { overflow: auto; min-width: 0; position: relative; }
+.source-pane {
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13.5px; line-height: 1.85;
+  padding: 20px 0 60px;
+  color: var(--fg-ui);
+}
+.render-pane {
+  display: flex; justify-content: center;
+}
+
+/* 源码区行号 */
+.source-pane .line {
+  position: relative;
+  display: flex; white-space: pre;
+  padding: 0 20px 0 0;
+}
+.source-pane .line .no {
+  flex: none; width: 44px; text-align: right; padding-right: 16px;
+  color: var(--fg-faint); user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.source-pane .line.cursor .no { color: var(--accent); }
+.source-pane .line.cursor { background: var(--bg-active); }
+.source-pane .line.cursor::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--accent);
+}
+
+/* Markdown 语法着色（对应 DESIGN.md 的 token colors） */
+.tk-fm-delim  { color: var(--fg-faint); }
+.tk-fm-key    { color: var(--info); }
+.tk-fm-string { color: var(--success); }
+.tk-fm-num    { color: var(--warning); }
+.tk-heading   { color: var(--accent); font-weight: 600; }
+.tk-marker    { color: var(--accent); }
+.tk-link      { color: var(--info); text-decoration: underline; text-underline-offset: 3px; }
+.tk-link .br  { color: var(--fg-faint); text-decoration: none; }
+.tk-comment   { color: var(--fg-faint); font-style: italic; }
+.tk-em        { color: var(--fg-muted); font-style: italic; }
+.tk-warn      { background: color-mix(in srgb, var(--warning) 18%, transparent); border-bottom: 1px solid var(--warning); }
+.tk-ghost     { color: var(--accent); opacity: 0.8; }
+
+/* ---------- 渲染区 ---------- */
+.render-pane .page { padding-top: 20px; }
+
+/* ---------- 悬浮卡片（设定链接） ---------- */
+.hover-card {
+  position: absolute; z-index: 5;
+  width: 260px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow-pop);
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 1.7;
+  padding: 12px 14px;
+  animation: card-in 120ms ease-out both;
+}
+@keyframes card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.hover-card .name {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--font-serif); font-size: 15px; font-weight: 600; color: var(--fg-text);
+  margin-bottom: 6px;
+}
+.hover-card .name .alias { font-family: var(--font-ui); font-size: 11px; font-weight: 400; color: var(--fg-muted); }
+.hover-card .row { display: flex; gap: 8px; }
+.hover-card .row .k { flex: none; width: 3em; color: var(--fg-muted); }
+.hover-card .row .v { color: var(--fg-ui); }
+.hover-card .tag {
+  display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 3px;
+  background: var(--accent-soft); color: var(--accent); margin: 6px 4px 0 0;
+}
+.hover-card .foot {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--fg-muted);
+  display: flex; justify-content: space-between;
+}
+.hover-card .foot a { color: var(--info); text-decoration: none; }
+
+/* ---------- 诊断悬浮 ---------- */
+.diag-pop {
+  position: absolute; z-index: 5;
+  width: 300px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow-pop);
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 1.7;
+  padding: 12px 14px;
+}
+.diag-pop .head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-weight: 600; color: var(--fg-text); }
+.diag-pop .head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
+.diag-pop .desc { color: var(--fg-muted); }
+.diag-pop .rule { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin: 6px 0 8px; }
+.diag-pop .btns { display: flex; gap: 6px; }
+.diag-pop .btns button {
+  font-size: 12px; padding: 3px 10px; border-radius: 4px;
+  background: var(--accent); color: var(--accent-fg);
+}
+.diag-pop .btns button.ghost { background: none; color: var(--fg-muted); border: 1px solid var(--border); }
+.diag-pop .btns button.ghost:hover { color: var(--fg-ui); }
+
+/* ---------- 面包屑（渲染区顶部） ---------- */
+.breadcrumb {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 16px;
+  font-size: 11.5px; color: var(--fg-muted);
+  background: color-mix(in srgb, var(--bg-editor) 85%, transparent);
+  backdrop-filter: blur(6px);
+}
+.breadcrumb .sep { color: var(--fg-faint); }
+.breadcrumb .cur { color: var(--fg-ui); }
+.breadcrumb .badge {
+  margin-left: auto; font-size: 10.5px; padding: 1px 7px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent);
+}
+
+/* 同步滚动指示 */
+.sync-hint {
+  position: absolute; right: 14px; bottom: 14px; z-index: 3;
+  font-size: 11px; color: var(--fg-muted);
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 12px; padding: 3px 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.sync-hint .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 1100px) {
+  .app.compare { grid-template-columns: 48px 220px minmax(0, 1fr); }
+}

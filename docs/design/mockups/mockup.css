@@ -1,0 +1,401 @@
+/* ============================================================
+   NovelPad Studio Mockup
+   色值与字体全部来自 docs/DESIGN.md 的设计令牌，勿在此处写死。
+   ============================================================ */
+
+/* ---------- 令牌：宣纸（浅色，默认） ---------- */
+:root {
+  --bg-editor:   #F7F3E8;
+  --bg-sidebar:  #F0EBDD;
+  --bg-activity: #2F2D2A;
+  --bg-status:   #E8E2D4;
+  --bg-hover:    #EAE4D6;
+  --bg-active:   #E3E9DC;
+  --bg-input:    #FBF8F0;
+  --border:      #E1DACA;
+
+  --fg-text:     #2B2825;
+  --fg-ui:       #3A3630;
+  --fg-muted:    #6B645C;
+  --fg-faint:    #948C80;
+
+  --accent:      #2F7D6B;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #E3E9DC;
+  --warning:     #B7791F;
+  --error:       #C5283D;
+  --success:     #3C8C5A;
+  --info:        #3A6EA5;
+
+  --activity-fg:         #A8A196;
+  --activity-fg-active:  #7FD1BF;
+
+  --tab-active-bg: var(--bg-editor);
+  --shadow-pop: 0 4px 16px rgba(43, 40, 37, 0.12);
+
+  --font-ui:    "HarmonyOS Sans SC", "HarmonyOS Sans", system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-kai:   "LXGW WenKai Screen", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", serif;
+  --font-serif: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-mono:  "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+
+  --name: "宣纸";
+}
+
+/* ---------- 令牌：夜墨（深色） ---------- */
+[data-theme="dark"] {
+  --bg-editor:   #201F1C;
+  --bg-sidebar:  #1B1A17;
+  --bg-activity: #141311;
+  --bg-status:   #171614;
+  --bg-hover:    #24231F;
+  --bg-active:   #242923;
+  --bg-input:    #26241F;
+  --border:      #2C2A26;
+
+  --fg-text:     #DAD3C6;
+  --fg-ui:       #CFC8BA;
+  --fg-muted:    #9A938A;
+  --fg-faint:    #6E685E;
+
+  --accent:      #5CB8A6;
+  --accent-fg:   #10201B;
+  --accent-soft: #1F2D28;
+  --warning:     #D9A04A;
+  --error:       #E5586B;
+  --success:     #5DBA82;
+  --info:        #7AA9DA;
+
+  --activity-fg:         #6E685E;
+  --activity-fg-active:  #5CB8A6;
+
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --name: "夜墨";
+}
+
+/* ---------- 基础 ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--fg-ui);
+  background: var(--bg-editor);
+  overflow: hidden;
+  transition: background-color 180ms ease-out, color 180ms ease-out;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+svg { display: block; }
+
+/* ---------- 整体网格 ---------- */
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 48px 260px minmax(0, 1fr) 300px;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "activity sidebar tabs    copilot"
+    "activity sidebar editor  copilot"
+    "status   status  status   status";
+}
+
+/* ---------- 活动栏 ---------- */
+.activity {
+  grid-area: activity;
+  background: var(--bg-activity);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 8px;
+}
+.activity .logo {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid; place-items: center;
+  font-family: var(--font-serif);
+  font-weight: 600; font-size: 15px;
+  margin-bottom: 14px;
+}
+.activity .item {
+  position: relative;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  color: var(--activity-fg);
+  border-radius: 6px;
+  transition: color 120ms ease-out;
+}
+.activity .item:hover { color: var(--fg-ui); }
+.activity .item.active { color: var(--activity-fg-active); }
+.activity .item.active::before {
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
+  width: 2px; border-radius: 2px; background: var(--accent);
+}
+.activity .spacer { flex: 1; }
+.activity .divider { width: 24px; height: 1px; background: var(--border); opacity: 0.5; margin: 8px 0; }
+.activity .wordcount {
+  font-size: 10px; color: var(--activity-fg);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px; letter-spacing: 0.02em;
+}
+
+/* ---------- 主侧栏 ---------- */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px 8px 16px;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.panel-header .actions { display: flex; gap: 2px; opacity: 0; transition: opacity 120ms ease-out; }
+.sidebar:hover .panel-header .actions { opacity: 1; }
+.icon-btn {
+  width: 22px; height: 22px; border-radius: 4px;
+  display: grid; place-items: center; color: var(--fg-muted);
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--fg-ui); }
+
+.tree { flex: 1; overflow: auto; padding: 0 6px 12px; }
+.tree .volume {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px 4px;
+  font-size: 12px; color: var(--fg-muted); letter-spacing: 0.02em;
+}
+.tree .volume .chev { color: var(--fg-faint); }
+.tree .row {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 10px 0 26px;
+  border-radius: 4px; color: var(--fg-ui);
+  white-space: nowrap; user-select: none;
+}
+.tree .row:hover { background: var(--bg-hover); }
+.tree .row.active { background: var(--bg-active); color: var(--fg-text); }
+.tree .row.active::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px;
+  width: 2px; border-radius: 2px; background: var(--accent);
+}
+.tree .row .title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tree .row .wc { font-size: 11px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.tree .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.tree .dot.warning { background: var(--warning); }
+.tree .dot.success { background: var(--success); }
+.tree .row.sub { padding-left: 40px; }
+.tree .row.sub .title { color: var(--fg-muted); }
+
+/* ---------- 标签页 ---------- */
+.tabs {
+  grid-area: tabs;
+  display: flex; align-items: flex-end;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  padding-left: 8px; height: 36px;
+}
+.tab {
+  display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 12px;
+  font-size: 12.5px; color: var(--fg-muted);
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.tab.active { background: var(--tab-active-bg); color: var(--fg-text); }
+.tab.active::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--accent);
+}
+.tab .kind { font-size: 10px; color: var(--fg-faint); letter-spacing: 0.04em; }
+.tab .close { opacity: 0; }
+.tab:hover .close { opacity: 1; }
+
+/* ---------- 编辑区 ---------- */
+.editor {
+  grid-area: editor;
+  background: var(--bg-editor);
+  overflow: auto;
+  display: flex; justify-content: center;
+}
+.page {
+  width: 100%; max-width: 800px;
+  padding: 56px 32px 120px;
+  font-family: var(--font-kai);
+  font-size: 19px; line-height: 2.0; letter-spacing: 0.02em;
+  color: var(--fg-text);
+}
+.chapter-title {
+  display: flex; align-items: center;
+  font-family: var(--font-serif);
+  font-weight: 600; font-size: 26px; line-height: 1.4;
+  margin-bottom: 36px;
+}
+.chapter-title::before {
+  content: ""; width: 4px; height: 28px; border-radius: 2px;
+  background: var(--accent); margin-right: 14px;
+}
+.chapter-meta {
+  font-family: var(--font-ui);
+  font-size: 12px; color: var(--fg-muted);
+  margin: -24px 0 32px 18px;
+  display: flex; gap: 14px;
+}
+.page p { text-indent: 2em; margin: 0 0 0.4em; }
+.page p.scene-break { text-align: center; text-indent: 0; color: var(--fg-faint); letter-spacing: 0.6em; margin: 1.2em 0; }
+.page .char-link { color: var(--fg-text); border-bottom: 1px dotted var(--accent); cursor: pointer; }
+.page .note {
+  font-family: var(--font-ui); font-size: 13px; color: var(--fg-muted);
+  background: var(--bg-input); border-left: 2px solid var(--border);
+  padding: 6px 12px; margin: 12px 0 20px; text-indent: 0; border-radius: 0 4px 4px 0;
+}
+.page .squiggle { text-decoration: underline wavy var(--warning) 1px; text-underline-offset: 4px; cursor: pointer; }
+
+/* Ghost text（AI 续写） */
+.ghost {
+  position: relative;
+  color: var(--accent); opacity: 0.78;
+  animation: ghost-in 120ms ease-out both;
+}
+@keyframes ghost-in { from { opacity: 0; } to { opacity: 0.78; } }
+.ghost .hint {
+  position: absolute; left: 2em; top: calc(100% + 2px);
+  font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.02em;
+  color: var(--fg-muted); opacity: 1; white-space: nowrap;
+  background: var(--bg-sidebar); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 8px;
+  box-shadow: var(--shadow-pop);
+}
+.ghost .hint kbd {
+  font-family: var(--font-mono); font-size: 10px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0 4px; margin: 0 2px; color: var(--fg-ui);
+}
+
+/* ---------- Copilot 面板 ---------- */
+.copilot {
+  grid-area: copilot;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.copilot .panel-header { padding: 10px 12px 10px 14px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--fg-text); }
+.copilot .brand { display: flex; align-items: center; gap: 8px; }
+.copilot .brand .orb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--accent-soft) 0%, var(--accent) 60%);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.copilot .body { flex: 1; overflow: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.context-card {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; font-size: 12px; line-height: 1.7;
+}
+.context-card .label { font-size: 11px; color: var(--fg-muted); letter-spacing: 0.06em; margin-bottom: 4px; display: flex; justify-content: space-between; }
+.context-card .label .toggle { color: var(--fg-faint); }
+.context-card .kv { display: flex; gap: 8px; }
+.context-card .kv .k { color: var(--fg-muted); flex: none; width: 2.5em; }
+.context-card .kv .v { color: var(--fg-ui); }
+.context-card .chip {
+  display: inline-block; padding: 0 6px; border-radius: 3px;
+  background: var(--bg-active); color: var(--fg-ui); font-size: 11px; margin-right: 4px;
+}
+
+.msg { font-size: 13.5px; line-height: 1.8; letter-spacing: 0.01em; }
+.msg.user {
+  align-self: flex-end; max-width: 90%;
+  background: var(--bg-hover); color: var(--fg-text);
+  padding: 8px 12px; border-radius: 8px 8px 2px 8px;
+}
+.msg.assistant {
+  position: relative;
+  background: var(--accent-soft); color: var(--fg-text);
+  padding: 10px 12px 10px 14px; border-radius: 2px 8px 8px 8px;
+}
+.msg.assistant::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 2px; border-radius: 2px; background: var(--accent);
+}
+.msg .role {
+  font-family: var(--font-ui); font-size: 11px; color: var(--accent);
+  margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+}
+.msg .sources {
+  margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border);
+  font-family: var(--font-ui); font-size: 11px; color: var(--fg-muted);
+}
+.msg .sources a { color: var(--info); text-decoration: none; margin-right: 6px; }
+.msg .actions { display: flex; gap: 4px; margin-top: 8px; }
+.msg .actions button {
+  font-size: 11px; color: var(--fg-muted); padding: 2px 6px; border-radius: 4px;
+}
+.msg .actions button:hover { background: var(--bg-hover); color: var(--fg-ui); }
+
+/* 建议动作（灯泡菜单的 Copilot 版本） */
+.quick-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.quick-actions button {
+  font-size: 11.5px; color: var(--fg-ui);
+  border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px;
+  background: var(--bg-input);
+}
+.quick-actions button:hover { border-color: var(--accent); color: var(--accent); }
+
+.composer {
+  margin: 8px 12px 12px; padding: 8px 10px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; color: var(--fg-faint);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.composer:focus-within { border-color: var(--accent); }
+.composer .send { color: var(--accent); }
+.composer .send svg { width: 16px; height: 16px; }
+
+/* ---------- 状态栏 ---------- */
+.status {
+  grid-area: status;
+  background: var(--bg-status);
+  border-top: 1px solid var(--border);
+  height: 24px;
+  display: flex; align-items: center;
+  padding: 0 12px 0 0; font-size: 12px; color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.status .accent-bar { width: 3px; height: 24px; background: var(--accent); margin-right: 10px; }
+.status .left, .status .right { display: flex; align-items: center; gap: 14px; }
+.status .right { margin-left: auto; }
+.status .item { display: flex; align-items: center; gap: 5px; }
+.status .item .dot { width: 6px; height: 6px; border-radius: 50%; }
+.status .ok { color: var(--success); }
+.status .warn { color: var(--warning); }
+.status .sep { color: var(--fg-faint); }
+.status .progress {
+  width: 64px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden;
+}
+.status .progress i { display: block; height: 100%; width: 80%; background: var(--accent); border-radius: 2px; }
+
+/* ---------- 主题切换（仅效果图用） ---------- */
+.theme-toggle {
+  position: fixed; right: 14px; top: 46px; z-index: 10;
+  font-size: 11px; color: var(--fg-muted);
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 12px; padding: 3px 10px;
+  box-shadow: var(--shadow-pop);
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+/* 按钮展示的是「点了之后会切到」的主题 */
+.theme-toggle::before { content: "切换到 夜墨"; }
+html[data-theme="dark"] .theme-toggle::before { content: "切换到 宣纸"; }
+
+/* 减少动态效果 */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* 窄屏时隐藏 Copilot 面板，保证可看 */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 48px 240px minmax(0, 1fr); grid-template-areas: "activity sidebar tabs" "activity sidebar editor" "status status status"; }
+  .copilot { display: none; }
+}

@@ -1,0 +1,17 @@
+type: character
+name: 沈默
+aliases: [小默]
+role: antagonist
+tags: [冷静, 神秘]
+summary: 清风茶馆的旧主，林晚的青梅竹马。
+attrs:
+  年龄: 28
+  发色: 黑色 · 短
+  瞳色: 黑色
+relations:
+  - target: 林晚
+    type: 青梅竹马 → 对峙
+    category: enemy
+  - target: 周砚
+    type: 旧识
+    category: ally

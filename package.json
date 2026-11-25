@@ -1,0 +1,23 @@
+{
+  "name": "novelpad",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NovelPad — 作家的 VS Code：Markdown 创作、设定即代码、Novel Copilot、知识图谱",
+  "type": "module",
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/* run build",
+    "test": "pnpm -r --filter ./packages/* run test",
+    "lint": "pnpm -r --filter ./packages/* run lint",
+    "typecheck": "pnpm -r --filter ./packages/* run typecheck",
+    "clean": "pnpm -r --filter ./packages/* run clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,28 @@
+# NovelPad 角色卡 · schema: characters/v1
+type: character
+name: 林晚
+aliases: [阿晚, 晚晚]
+role: protagonist
+tags: [克制, 敏锐, 撰稿人]
+summary: 一个不肯停下追问的自由撰稿人。
+description: 七年前的旧事后离开旧城区，靠写稿为生。表面克制，实则很难真正放下。
+attrs:
+  年龄: 27
+  发色: 黑色 · 及肩
+  瞳色: 深棕
+  情绪克制: 高
+  习惯: 紧张时摸左手腕
+relations:
+  - target: 沈默
+    type: 敌对 · 对峙
+    category: enemy
+    note: 曾是青梅竹马；雨夜重逢后落锁对峙
+  - target: 林父
+    type: 亲缘 · 父女
+    category: family
+    note: 疏离；通过信件得知父亲与商会的关系
+state:
+  emotion: 戒备
+  location: 旧城区 · 清风茶馆
+  knows: [父亲的事]
+  since: 3

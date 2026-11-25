@@ -1,0 +1,31 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+build/
+out/
+*.vsix
+*.tsbuildinfo
+
+# 测试与覆盖率
+coverage/
+.vitest/
+.vscode-test/
+
+# NovelPad 运行时索引（可重建）
+.novelpad/index/
+.novelpad/cache/
+
+# 模型缓存（Embedding ONNX）
+.models/
+.cache/
+
+# 上游源码（shell 构建时拉取）
+shell/vscode/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+*.log

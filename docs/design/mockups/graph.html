@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelPad Studio · 图谱</title>
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="graph.css">
+</head>
+<body>
+<div class="app full" id="app">
+
+  <nav class="activity">
+    <div class="logo">N</div>
+    <button class="item" title="章节"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h5"/></svg></button>
+    <button class="item" title="设定"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 8h7"/></svg></button>
+    <button class="item" title="大纲"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+    <button class="item active" title="图谱"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.3 7.3l3.3 8.4M16.7 7.3l-3.3 8.4M7.5 6h9"/></svg></button>
+    <div class="spacer"></div>
+    <button class="item" title="设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+    <div class="wordcount">12,480</div>
+  </nav>
+
+  <aside class="sidebar">
+    <div class="panel-header">
+      <span>图谱</span>
+      <div class="actions">
+        <button class="icon-btn" title="更新抽取"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+        <button class="icon-btn" title="更多"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+      </div>
+    </div>
+    <div class="tree">
+      <div class="volume"><span class="chev">▾</span> 待回收伏笔 <span class="badge warn" style="margin-left:auto">2</span></div>
+      <div class="row"><span class="title">fs-letter · 来信</span><span class="badge warn">逾期</span></div>
+      <div class="row"><span class="title">fs-umbrella · 伞</span><span class="badge">第 12 章</span></div>
+      <div class="volume"><span class="chev">▾</span> 主要角色</div>
+      <div class="row"><span class="title">林晚</span><span class="badge">12</span></div>
+      <div class="row"><span class="title">沈默</span><span class="badge">9</span></div>
+      <div class="row"><span class="title">林父</span><span class="badge">4</span></div>
+      <div class="row"><span class="title">周砚</span><span class="badge">3</span></div>
+      <div class="volume"><span class="chev">▾</span> 地点</div>
+      <div class="row"><span class="title">清风茶馆</span><span class="badge">5</span></div>
+      <div class="row"><span class="title">旧城区</span><span class="badge">7</span></div>
+      <div class="volume"><span class="chev">▾</span> 势力</div>
+      <div class="row"><span class="title">港口商会</span><span class="badge">2</span></div>
+    </div>
+    <div style="padding: 8px 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--fg-faint); line-height:1.6;">
+      上次抽取：2 小时前<br>模型：glm-4-flash · 38 条关系
+    </div>
+  </aside>
+
+  <div class="tabs">
+    <div class="tab active"><span class="kind">图谱</span><span>雨夜 · 关系网</span></div>
+    <div class="tab"><span class="kind">图谱</span><span>剧情发展链</span></div>
+    <div class="view-switch" style="margin-left:auto">
+      <span class="kbd-hint">拖拽平移 · 滚轮缩放 · 点击节点查看详情</span>
+    </div>
+  </div>
+
+  <!-- 关系云图舞台 -->
+  <div class="graph-stage" id="stage">
+    <div class="grid-bg"></div>    <div class="graph-toolbar">
+      <div class="modes">
+        <button data-v="net" class="active">关系云图</button>
+        <button data-v="chain">剧情发展链</button>
+      </div>
+      <div class="title">实体类型</div>
+      <div class="legend">
+        <label><input type="checkbox" checked data-t="char"><i style="background:#C8402F"></i>角色</label>
+        <label><input type="checkbox" checked data-t="place"><i style="background:#B7791F"></i>地点</label>
+        <label><input type="checkbox" checked data-t="faction"><i style="background:#3A6EA5"></i>势力</label>
+        <label><input type="checkbox" checked data-t="item"><i style="background:#3C8C5A"></i>物品</label>
+        <label><input type="checkbox" checked data-t="event"><i style="background:#7C5CBF"></i>事件</label>
+      </div>
+      <div class="title" style="margin-top:4px">章节范围</div>
+      <div class="range-row"><span>第 1 章</span><input type="range" id="rng" min="1" max="24" value="24"><span class="val" id="rngVal">至第 24 章</span></div>
+      <div class="range-row" style="font-size:11px"><span>来源</span>
+        <div class="seg" style="margin-left:auto"><button class="active">全部</button><button>设定卡</button><button>AI 抽取</button></div>
+      </div>
+    </div>
+
+    <div class="graph-ctrl">
+      <button title="放大">＋</button>
+      <button title="缩小">－</button>
+      <button title="适应画布"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      <button title="重新布局"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+    </div>
+
+    <svg class="net" viewBox="0 0 1100 700" id="net">
+      <defs>
+        <marker id="arrow-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#B7791F"/></marker>
+      </defs>
+      <path class="edge strong" d="M430 330 Q 555 270 640 250"/>
+      <text class="edge-label" x="547" y="278">青梅竹马</text>
+      <path class="edge hostile" d="M430 330 Q 555 270 640 250"/>
+      <text class="edge-label" x="547" y="278">对峙</text>
+      <path class="edge" d="M430 330 Q 360 235 250 180"/>
+      <text class="edge-label" x="352" y="243">父女</text>
+      <path class="edge" d="M250 180 Q 335 115 380 90"/>
+      <text class="edge-label" x="327" y="123">曾效力</text>
+      <path class="edge" d="M640 250 Q 740 195 800 180"/>
+      <text class="edge-label" x="732" y="203">旧识</text>
+      <path class="edge" d="M800 180 Q 610 115 380 90"/>
+      <text class="edge-label" x="602" y="123">成员</text>
+      <path class="edge" d="M430 330 Q 515 380 560 470"/>
+      <text class="edge-label" x="507" y="388">常去</text>
+      <path class="edge" d="M640 250 Q 620 340 560 470"/>
+      <text class="edge-label" x="612" y="348">旧主</text>
+      <path class="edge" d="M250 180 Q 235 230 180 320"/>
+      <text class="edge-label" x="227" y="238">遗留</text>
+      <path class="edge causal" d="M180 320 Q 325 305 430 330"/>
+      <text class="edge-label" x="317" y="313">得知真相</text>
+      <path class="edge" d="M760 420 Q 615 355 430 330"/>
+      <text class="edge-label" x="607" y="363">持有</text>
+      <path class="edge" d="M760 420 Q 720 315 640 250"/>
+      <text class="edge-label" x="712" y="323">赠送</text>
+      <path class="edge causal" d="M520 600 Q 495 445 430 330"/>
+      <text class="edge-label" x="487" y="453">卷入</text>
+      <path class="edge causal" d="M520 600 Q 600 405 640 250"/>
+      <text class="edge-label" x="592" y="413">重逢</text>
+      <path class="edge" d="M520 600 Q 560 515 560 470"/>
+      <text class="edge-label" x="552" y="523">发生于</text>
+      <path class="edge causal" d="M520 600 Q 370 440 180 320"/>
+      <text class="edge-label" x="362" y="448">发现</text>
+      <g class="node item" data-id="xin"><circle class="ring" cx="180" cy="320" r="22"/><circle class="body" cx="180" cy="320" r="16"/><text x="180" y="32">信件</text></g>
+      <g class="node faction" data-id="shanghui"><circle class="ring" cx="380" cy="90" r="28"/><circle class="body" cx="380" cy="90" r="22"/><text x="380" y="38">港口商会</text></g>
+      <g class="node char selected" data-id="linwan"><circle class="ring" cx="430" cy="330" r="40"/><circle class="body" cx="430" cy="330" r="34"/><text x="430" y="52">林晚</text><text class="role" x="430" y="65">主角</text></g>
+      <g class="node char" data-id="zhouyan"><circle class="ring" cx="800" cy="180" r="26"/><circle class="body" cx="800" cy="180" r="20"/><text x="800" y="38">周砚</text><text class="role" x="800" y="51">次要</text></g>
+      <g class="node item" data-id="san"><circle class="ring" cx="760" cy="420" r="22"/><circle class="body" cx="760" cy="420" r="16"/><text x="760" y="32">油纸伞</text></g>
+      <g class="node char" data-id="linfu"><circle class="ring" cx="250" cy="180" r="28"/><circle class="body" cx="250" cy="180" r="22"/><text x="250" y="40">林父</text><text class="role" x="250" y="53">次要</text></g>
+      <g class="node place" data-id="jiucheng"><circle class="ring" cx="330" cy="520" r="26"/><circle class="body" cx="330" cy="520" r="20"/><text x="330" y="36">旧城区</text></g>
+      <g class="node char" data-id="shenmo"><circle class="ring" cx="640" cy="250" r="36"/><circle class="body" cx="640" cy="250" r="30"/><text x="640" y="48">沈默</text><text class="role" x="640" y="61">对手</text></g>
+      <g class="node event" data-id="ev-rain"><circle class="ring" cx="520" cy="600" r="24"/><circle class="body" cx="520" cy="600" r="18"/><text x="520" y="34">雨夜重逢</text></g>
+      <g class="node place" data-id="chaguan"><circle class="ring" cx="560" cy="470" r="30"/><circle class="body" cx="560" cy="470" r="24"/><text x="560" y="40">清风茶馆</text></g>
+    </svg>
+    <div class="graph-stats"><span><b>10</b> 节点</span><span><b>16</b> 关系</span><span><b>9</b> 来自设定卡</span><span><b>7</b> AI 抽取</span></div>
+    <div class="graph-tip">AI 抽取的关系可虚线标记 · 在详情中确认或删除</div>
+    <aside class="graph-detail">
+      <div class="head">
+        <div class="kind"><span class="type">● 角色</span><span>第 1 / 24 章 · 出场 12 次</span></div>
+        <h2>林晚</h2>
+        <div class="aliases">别称 · 阿晚 · 晚晚</div>
+      </div>
+      <div class="body">
+        <div class="section">
+          <div class="t"><span>属性</span><a style="color:var(--info);text-decoration:none;font-size:11px" href="#">编辑角色卡 →</a></div>
+          <div class="kv"><span class="k">年龄</span><span class="v">27</span></div>
+          <div class="kv"><span class="k">身份</span><span class="v">自由撰稿人</span></div>
+          <div class="kv"><span class="k">性格</span><span class="v">克制 · 敏锐 · 不轻信</span></div>
+          <div class="kv"><span class="k">当前</span><span class="v">旧城区 · 清风茶馆 · 持刀</span></div>
+        </div>
+        <div class="section">
+          <div class="t"><span>关系</span><span>4 条</span></div>
+          <div class="rel-list">
+            <div class="rel"><b>沈默</b><span class="dir">青梅竹马 → 对峙</span><span class="type enemy">敌对</span></div>
+            <div class="rel"><b>林父</b><span class="dir">父女 · 疏离</span><span class="type family">亲缘</span></div>
+            <div class="rel"><b>周砚</b><span class="dir">被监视</span><span class="type enemy">敌对</span><span class="src lm">AI</span></div>
+            <div class="rel"><b>信件</b><span class="dir">持有 · 得知真相</span><span class="src">第 3 章</span></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="t"><span>相关段落</span><span>RAG 检索</span></div>
+          <div class="evidence">林晚盯着那只杯子看了很久，才听见身后有人轻轻把门关上，落了锁。<div class="from"><a>第 1 章 · 雨夜</a><span>相似度 0.91</span></div></div>
+          <div class="evidence">她在信末只写了一行字：别再查了。<div class="from"><a>第 3 章 · 来信</a><span>相似度 0.87</span></div></div>
+        </div>
+        <div class="section">
+          <div class="t"><span>事件链</span></div>
+          <div class="rel-list">
+            <div class="rel"><span class="dir">雨夜重逢</span><span class="src">第 1 章</span></div>
+            <div class="rel"><span class="dir">得知父亲的事</span><span class="src">第 3 章</span></div>
+            <div class="rel"><span class="dir">密约</span><span class="src">第 4 章 · 未写</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn sm" style="flex:1">在正文中定位</button>
+        <button class="btn sm secondary">问 Copilot</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 剧情发展链 -->
+  <div class="timeline">
+    <div class="tl-header">
+      <h1>剧情发展链</h1>
+      <span class="sub">卷一 · 雨夜 → 卷二 · 暗流 · 按章节时序 · 虚线为因果 · 赭色为未闭合伏笔</span>
+      <div class="seg" style="margin-left:auto"><button class="active">事件</button><button>伏笔</button><button>角色线</button></div>
+    </div>
+    <svg class="tl-svg" viewBox="0 0 1100 420">
+      <defs>
+        <marker id="ar-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#B7791F"/></marker>
+        <marker id="ar-causal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2F7D6B"/></marker>
+      </defs>
+      <line class="tl-axis" x1="80" y1="60" x2="1060" y2="60"/>
+      <text class="tl-chapter" x="160" y="50">第 1 章</text>
+      <text class="tl-chapter" x="330" y="50">第 2 章</text>
+      <text class="tl-chapter" x="500" y="50">第 3 章</text>
+      <text class="tl-chapter" x="670" y="50">第 4 章</text>
+      <text class="tl-chapter" x="840" y="50">第 5 章</text>
+      <text class="tl-chapter" x="1000" y="50">第 6 章</text>
+      <text class="tl-lane-label" x="20" y="160">林晚</text>
+      <line class="tl-lane" x1="80" y1="170" x2="1060" y2="170"/>
+      <text class="tl-lane-label" x="20" y="260">沈默</text>
+      <line class="tl-lane" x1="80" y1="270" x2="1060" y2="270"/>
+      <text class="tl-lane-label" x="20" y="360">暗线</text>
+      <line class="tl-lane" x1="80" y1="370" x2="1060" y2="370"/>
+
+      <g class="tl-node lane-main"><rect x="100" y="145" width="120" height="40" rx="6"/><text class="name" x="160" y="163">雨夜重逢</text><text class="meta" x="160" y="177">林晚 · 茶馆</text></g>
+      <g class="tl-node lane-main"><rect x="270" y="145" width="120" height="40" rx="6"/><text class="name" x="330" y="163">重访旧城</text><text class="meta" x="330" y="177">寻找布帘</text></g>
+      <g class="tl-node lane-main"><rect x="440" y="145" width="120" height="40" rx="6"/><text class="name" x="500" y="163">收到来信</text><text class="meta" x="500" y="177">父亲的事</text></g>
+      <g class="tl-node lane-main open"><rect x="610" y="145" width="120" height="40" rx="6"/><text class="name" x="670" y="163">密约</text><text class="meta" x="670" y="177">未写 · 草稿</text></g>
+      <g class="tl-node lane-main"><rect x="780" y="145" width="120" height="40" rx="6"/><text class="name" x="840" y="163">夜行</text><text class="meta" x="840" y="177">前往港口</text></g>
+
+      <g class="tl-node lane-a"><rect x="100" y="245" width="120" height="40" rx="6"/><text class="name" x="160" y="263">落锁</text><text class="meta" x="160" y="277">「你不该来」</text></g>
+      <g class="tl-node lane-a"><rect x="440" y="245" width="120" height="40" rx="6"/><text class="name" x="500" y="263">寄出信件</text><text class="meta" x="500" y="277">劝阻</text></g>
+      <g class="tl-node lane-a open"><rect x="610" y="245" width="120" height="40" rx="6"/><text class="name" x="670" y="263">与周砚碰面</text><text class="meta" x="670" y="277">未写</text></g>
+
+      <g class="tl-node lane-b"><rect x="270" y="345" width="120" height="40" rx="6"/><text class="name" x="330" y="363">布帘被换</text><text class="meta" x="330" y="377">三年前 · 伏笔</text></g>
+      <g class="tl-node lane-b"><rect x="780" y="345" width="120" height="40" rx="6"/><text class="name" x="840" y="363">商会介入</text><text class="meta" x="840" y="377">暗线浮现</text></g>
+
+      <path class="tl-link" d="M220 165 C 240 165, 250 165, 270 165"/>
+      <path class="tl-link" d="M390 165 C 410 165, 420 165, 440 165"/>
+      <path class="tl-link" d="M560 165 C 580 165, 590 165, 610 165"/>
+      <path class="tl-link" d="M730 165 C 750 165, 760 165, 780 165"/>
+      <path class="tl-link causal" marker-end="url(#ar-causal)" d="M220 165 C 260 165, 260 265, 440 265"/>
+      <path class="tl-link causal" marker-end="url(#ar-causal)" d="M560 265 C 580 265, 590 230, 610 230 C 640 230, 650 245, 670 245"/>
+      <path class="tl-link causal" marker-end="url(#ar-causal)" d="M560 165 C 600 165, 620 365, 780 365"/>
+      <path class="tl-link causal" marker-end="url(#ar-causal)" d="M220 165 C 200 200, 240 300, 330 345"/>
+      <path class="tl-link open" marker-end="url(#ar-warn)" d="M390 365 C 500 365, 560 300, 640 300 C 700 300, 720 260, 760 260"/>
+
+      <text class="tl-flag-text" x="770" y="250">fs-letter 逾期 · 应在第 4 章回收</text>
+      <text class="tl-flag-text" x="395" y="390">fs-umbrella → 第 12 章</text>
+    </svg>
+  </div>
+
+  <footer class="status">
+    <div class="accent-bar"></div>
+    <div class="left">
+      <span>卷一 · 雨夜</span><span class="sep">·</span>
+      <span class="warn">⚠ 2 个待回收伏笔</span><span class="sep">·</span>
+      <span>16 条关系 · 7 条待确认</span>
+    </div>
+    <div class="right">
+      <span>索引 1,284 个场景块</span><span class="sep">·</span>
+      <span class="item"><span class="dot" style="background:var(--accent)"></span>Embedding · bge-small-zh</span>
+    </div>
+  </footer>
+</div>
+
+<button class="theme-toggle" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? '' : 'dark'">夜墨</button>
+
+<script>
+  const stage = document.getElementById('stage');
+  document.querySelectorAll('.graph-toolbar [data-v]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stage.classList.toggle('mode-chain', btn.dataset.v === 'chain');
+      document.querySelectorAll('.graph-toolbar [data-v]').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.app .tabs .tab').forEach((t, i) => t.classList.toggle('active', (btn.dataset.v === 'chain') ? i === 1 : i === 0));
+    });
+  });
+  // 章节范围
+  const rng = document.getElementById('rng');
+  rng.addEventListener('input', () => { document.getElementById('rngVal').textContent = '至第 ' + rng.value + ' 章'; });
+  // 实体类型筛选
+  document.querySelectorAll('.legend input').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.parentElement.classList.toggle('off', !cb.checked);
+      document.querySelectorAll('.node.' + cb.dataset.t).forEach(n => n.classList.toggle('dim', !cb.checked));
+    });
+  });
+  // 节点选中 + 高亮邻居
+  document.querySelectorAll('.node').forEach(n => {
+    n.addEventListener('click', () => {
+      document.querySelectorAll('.node').forEach(x => x.classList.remove('selected'));
+      n.classList.add('selected');
+    });
+  });
+</script>
+</body>
+</html>

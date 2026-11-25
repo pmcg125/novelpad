@@ -1,0 +1,125 @@
+/* ============================================================
+   设定页：角色卡编辑器（表单 ↔ YAML）
+   ============================================================ */
+
+.lore-stage {
+  grid-area: main;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  min-height: 0;
+  background: var(--bg-editor);
+}
+
+/* ---------- 表单区 ---------- */
+.card-form {
+  overflow: auto;
+  padding: 28px 36px 60px;
+}
+.card-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 22px; }
+.avatar {
+  width: 56px; height: 56px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-family: var(--font-serif); font-size: 24px; font-weight: 600;
+  background: color-mix(in srgb, #C8402F 15%, var(--bg-editor)); color: #C8402F;
+  border: 2px solid #C8402F;
+}
+html[data-theme="dark"] .avatar { background: color-mix(in srgb, #E5695A 18%, var(--bg-editor)); color: #E5695A; border-color: #E5695A; }
+.card-head .titles { flex: 1; }
+.card-head h1 { font-family: var(--font-serif); font-size: 24px; color: var(--fg-text); display: flex; align-items: center; gap: 10px; }
+.card-head h1 .type-tag { font-family: var(--font-ui); font-size: 11px; font-weight: 400; color: #C8402F; background: color-mix(in srgb, #C8402F 12%, transparent); padding: 1px 8px; border-radius: 8px; }
+html[data-theme="dark"] .card-head h1 .type-tag { color: #E5695A; background: color-mix(in srgb, #E5695A 15%, transparent); }
+.card-head .sub { font-size: 12.5px; color: var(--fg-muted); margin-top: 4px; }
+.card-head .head-actions { display: flex; gap: 6px; align-items: center; }
+
+.card-section {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 18px; margin-bottom: 14px;
+}
+.card-section .sec-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--fg-muted); letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+.card-section .sec-title .n { font-variant-numeric: tabular-nums; color: var(--fg-faint); }
+.card-section .sec-title .right { margin-left: auto; display: flex; gap: 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
+
+/* 自定义属性（可自由增删的键值对） */
+.kv-row { display: grid; grid-template-columns: 120px 1fr 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.kv-row .input.k { color: var(--info); font-family: var(--font-mono); font-size: 12px; }
+.kv-row .del { color: var(--fg-faint); text-align: center; }
+.kv-row .del:hover { color: var(--error); }
+
+/* 关系列表 */
+.rel-edit { display: flex; flex-direction: column; gap: 6px; }
+.rel-edit .row { display: grid; grid-template-columns: 1fr 140px 1fr 24px; gap: 6px; align-items: center; }
+.rel-edit .row .with { font-size: 12.5px; color: var(--fg-text); }
+.rel-edit .row .arrow { font-size: 11px; color: var(--fg-faint); text-align: center; }
+
+/* 状态机：情绪 / 位置 / 知晓 */
+.state-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.state-cell { background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.state-cell .t { font-size: 11px; color: var(--fg-muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.state-cell .t .ch { color: var(--accent); font-size: 10.5px; }
+.state-cell .v { font-size: 13.5px; color: var(--fg-text); }
+.state-cell .v small { display: block; font-size: 11px; color: var(--fg-muted); margin-top: 2px; }
+
+/* 出场记录 */
+.appear-list { display: flex; flex-direction: column; gap: 4px; }
+.appear { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 5px 8px; border-radius: 4px; }
+.appear:hover { background: var(--bg-hover); }
+.appear .ch { color: var(--fg-muted); width: 56px; font-variant-numeric: tabular-nums; }
+.appear .bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.appear .bar i { display: block; height: 100%; background: #C8402F; border-radius: 2px; opacity: 0.75; }
+html[data-theme="dark"] .appear .bar i { background: #E5695A; }
+.appear .n { color: var(--fg-muted); font-size: 11px; width: 60px; text-align: right; }
+
+/* ---------- 右侧：YAML 源码 ---------- */
+.card-src {
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.card-src .src-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  font-size: 11.5px; color: var(--fg-muted);
+}
+.card-src .src-head .path { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+.card-src .src-head .seg { margin-left: auto; }
+.card-src pre {
+  flex: 1; overflow: auto; margin: 0;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.75;
+  padding: 12px 14px; color: var(--fg-ui);
+  white-space: pre;
+}
+.card-src pre .k { color: var(--info); }
+.card-src pre .s { color: var(--success); }
+.card-src pre .n { color: var(--warning); }
+.card-src pre .d { color: var(--fg-faint); }
+.card-src pre .hl { background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 2px; display: inline-block; width: 100%; }
+.card-src .src-foot {
+  padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--fg-muted);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-src .src-foot .ok { color: var(--success); }
+
+/* 左侧栏：角色列表带头像 */
+.tree .row .ava {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 10px; font-family: var(--font-serif);
+  background: color-mix(in srgb, #C8402F 14%, var(--bg-sidebar)); color: #C8402F;
+}
+.tree .row .ava.place { background: color-mix(in srgb, #B7791F 14%, var(--bg-sidebar)); color: #B7791F; }
+.tree .row .ava.faction { background: color-mix(in srgb, #3A6EA5 14%, var(--bg-sidebar)); color: #3A6EA5; }
+.tree .row .ava.item { background: color-mix(in srgb, #3C8C5A 14%, var(--bg-sidebar)); color: #3C8C5A; }
+html[data-theme="dark"] .tree .row .ava { color: #E5695A; }
+html[data-theme="dark"] .tree .row .ava.place { color: #D9A04A; }
+html[data-theme="dark"] .tree .row .ava.faction { color: #7AA9DA; }
+html[data-theme="dark"] .tree .row .ava.item { color: #5DBA82; }
+
+@media (max-width: 1200px) { .lore-stage { grid-template-columns: minmax(0, 1fr); } .card-src { display: none; } }

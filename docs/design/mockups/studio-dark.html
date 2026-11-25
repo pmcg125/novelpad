@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelPad Studio · 夜墨（深色）</title>
+<link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+<script>if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '';</script>
+<div class="app">
+
+  <!-- 活动栏 -->
+  <nav class="activity">
+    <div class="logo">N</div>
+    <button class="item active" title="章节">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+    </button>
+    <button class="item" title="设定">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 8h7"/></svg>
+    </button>
+    <button class="item" title="大纲">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+    </button>
+    <button class="item" title="图谱">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.3 7.3l3.3 8.4M16.7 7.3l-3.3 8.4M7.5 6h9"/></svg>
+    </button>
+    <div class="spacer"></div>
+    <button class="item" title="版本">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7"/><path d="M18 15.5V12a4 4 0 0 0-4-4h-3"/></svg>
+    </button>
+    <div class="divider"></div>
+    <button class="item" title="设置">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+    <div class="wordcount">12,480</div>
+  </nav>
+
+  <!-- 侧栏：章节树 -->
+  <aside class="sidebar">
+    <div class="panel-header">
+      <span>章节</span>
+      <div class="actions">
+        <button class="icon-btn" title="新建章节"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="icon-btn" title="更多"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+      </div>
+    </div>
+    <div class="tree">
+      <div class="volume"><span class="chev">▾</span> 卷一 · 雨夜</div>
+      <div class="row active"><span class="title">第1章 雨夜</span><span class="wc">3,210</span></div>
+      <div class="row"><span class="title">第2章 旧城</span><span class="wc">2,860</span><span class="dot success"></span></div>
+      <div class="row"><span class="title">第3章 来信</span><span class="wc">3,040</span><span class="dot success"></span></div>
+      <div class="volume"><span class="chev">▾</span> 卷二 · 暗流</div>
+      <div class="row"><span class="title">第4章 密约</span><span class="wc">1,920</span><span class="dot warning"></span></div>
+      <div class="row"><span class="title">第5章 夜行</span><span class="wc">—</span></div>
+      <div class="row sub"><span class="title">＋ 新建章节</span></div>
+    </div>
+  </aside>
+
+  <!-- 标签页 -->
+  <div class="tabs">
+    <div class="tab active"><span class="kind">第1章</span><span>雨夜.md</span>
+      <span class="close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+    </div>
+  </div>
+
+  <!-- 编辑区 -->
+  <main class="editor">
+    <article class="page">
+      <h1 class="chapter-title">第一章 雨夜</h1>
+      <div class="chapter-meta">
+        <span>视角 · 林晚</span><span>出场 · 林晚、沈默</span><span>地点 · 旧城区</span><span>草稿</span>
+      </div>
+
+      <p>雨是从傍晚开始下的。</p>
+      <p>起初只是几滴，敲在铁皮棚顶上像谁在试探。到了七点，雨势陡然大了起来，整条巷子被一层灰白的水雾罩住，路灯的光只能照到脚下三步远的地方。<span class="char-link">林晚</span>把伞压低了一些，沿着墙根往里走，鞋尖已经湿透。</p>
+      <p>巷子尽头的旧茶馆还亮着灯。她记得三年前这里还不是这样的——门口挂着褪色的布帘，帘子上印着「清风」二字，是<span class="char-link">沈默</span>亲手写的。如今布帘换成了塑料的，字也没了，只剩下一道被雨水冲刷得发白的痕迹。</p>
+
+      <div class="note">备注：这里要补一句林晚对茶馆的回忆，为第 4 章沈默提到「上次修帘子」做铺垫。</div>
+
+      <p>她推门进去。风铃响了一声，闷闷的，像被水浸过。</p>
+      <p>柜台后没有人。茶几上摆着两只杯子，一只空的，一只还剩半盏凉透的茶，杯沿留着浅浅的口红印。林晚盯着那只杯子看了很久，才听见身后有人轻轻把门关上，落了锁。</p>
+      <p class="scene-break">＊＊＊</p>
+      <p>「你不该来。」</p>
+      <p>声音很近，就在她耳后。林晚没有回头，只是把手伸进大衣口袋，握住了那把折叠刀。<span class="squiggle">她</span>知道这个声音，也知道这个声音的主人此刻应该<span class="squiggle">远在</span>南方的港口城市——至少，三天前的那封信里是这么说的。</p>
+
+      <p class="ghost">他伸手接过伞，指尖触到她的目光——
+        <span class="hint"><kbd>Tab</kbd> 接受 · <kbd>Esc</kbd> 忽略 · <kbd>Alt</kbd>+<kbd>]</kbd> 下一条</span>
+      </p>
+    </article>
+  </main>
+
+  <!-- Copilot 面板 -->
+  <aside class="copilot">
+    <div class="panel-header">
+      <div class="brand"><span class="orb"></span> Novel Copilot</div>
+      <button class="icon-btn" title="更多"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </div>
+    <div class="body">
+      <div class="context-card">
+        <div class="label"><span>本章上下文</span><span class="toggle">自动 · 3 项</span></div>
+        <div class="kv"><span class="k">角色</span><span class="v"><span class="chip">林晚</span><span class="chip">沈默</span></span></div>
+        <div class="kv"><span class="k">地点</span><span class="v">旧城区 · 清风茶馆</span></div>
+        <div class="kv"><span class="k">前置</span><span class="v">第 3 章 · 来信</span></div>
+      </div>
+
+      <div class="msg user">这一段林晚的反应会不会太冷静了？</div>
+
+      <div class="msg assistant">
+        <div class="role">Copilot</div>
+        按角色卡，林晚在「情绪克制」上标为高，但在第 3 章她已经知道父亲的事，这里的反应可以更克制一些——比如先确认杯子上的口红印，再握刀，而不是立刻进入戒备。
+        <div class="sources">依据：<a>第 3 章 · 来信</a><a>角色卡 · 林晚</a></div>
+        <div class="actions"><button>采纳</button><button>插入正文</button><button>换一种</button></div>
+      </div>
+
+      <div class="quick-actions">
+        <button>润色选中</button><button>扩写</button><button>换视角</button><button>检查设定</button>
+      </div>
+    </div>
+    <div class="composer">
+      <span>问问你的故事……</span>
+      <button class="send" title="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+    </div>
+  </aside>
+
+  <!-- 状态栏 -->
+  <footer class="status">
+    <div class="accent-bar"></div>
+    <div class="left">
+      <span>第 1 章 / 共 24 章</span>
+      <span class="sep">·</span>
+      <span>视角 · 林晚</span>
+      <span class="sep">·</span>
+      <span class="warn">草稿</span>
+      <span class="sep">·</span>
+      <span class="ok">✓ 设定一致</span>
+      <span class="item"><span class="dot" style="background:var(--warning)"></span>2 个待回收伏笔</span>
+    </div>
+    <div class="right">
+      <span class="item"><span class="progress"><i></i></span> 3,210 / 4,000</span>
+      <span>本章 3,210 字</span>
+      <span class="sep">·</span>
+      <span>全书 128,450 字</span>
+      <span class="sep">·</span>
+      <span class="item"><span class="dot" style="background:var(--accent)"></span>Copilot · GLM</span>
+    </div>
+  </footer>
+</div>
+
+<button class="theme-toggle" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? '' : 'dark'">宣纸</button>
+
+</body>
+</html>

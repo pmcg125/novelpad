@@ -1,0 +1,39 @@
+{
+  "name": "@novelpad/core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NovelPad 核心逻辑：Markdown 章节 / 设定解析、索引、lint、导出、RAG、图谱。零 vscode 依赖。",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --sourcemap --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "eslint": "^9.10.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

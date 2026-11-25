@@ -1,0 +1,14 @@
+type: character
+name: 林父
+role: supporting
+summary: 林晚的父亲，七年前失踪，与港口商会有关。
+attrs:
+  年龄: 58
+  特征: 左手戴旧手表
+relations:
+  - target: 林晚
+    type: 父女
+    category: family
+  - target: 港口商会
+    type: 曾效力
+    category: neutral

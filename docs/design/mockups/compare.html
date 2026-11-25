@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelPad Studio · Markdown 源码 / 渲染对比</title>
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="compare.css">
+</head>
+<body>
+<div class="app compare" id="app" data-mode="split">
+
+  <nav class="activity">
+    <div class="logo">N</div>
+    <button class="item active" title="章节"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h5"/></svg></button>
+    <button class="item" title="设定"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 8h7"/></svg></button>
+    <button class="item" title="大纲"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+    <button class="item" title="图谱"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.3 7.3l3.3 8.4M16.7 7.3l-3.3 8.4M7.5 6h9"/></svg></button>
+    <div class="spacer"></div>
+    <button class="item" title="设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+    <div class="wordcount">12,480</div>
+  </nav>
+
+  <aside class="sidebar">
+    <div class="panel-header">
+      <span>章节</span>
+      <div class="actions"><button class="icon-btn" title="新建章节"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    </div>
+    <div class="tree">
+      <div class="volume"><span class="chev">▾</span> 卷一 · 雨夜</div>
+      <div class="row active"><span class="title">第1章 雨夜</span><span class="wc">3,210</span></div>
+      <div class="row"><span class="title">第2章 旧城</span><span class="wc">2,860</span><span class="dot success"></span></div>
+      <div class="row"><span class="title">第3章 来信</span><span class="wc">3,040</span><span class="dot success"></span></div>
+      <div class="volume"><span class="chev">▾</span> 卷二 · 暗流</div>
+      <div class="row"><span class="title">第4章 密约</span><span class="wc">1,920</span><span class="dot warning"></span></div>
+      <div class="row"><span class="title">第5章 夜行</span><span class="wc">—</span></div>
+    </div>
+  </aside>
+
+  <div class="tabs">
+    <div class="tab active"><span class="kind">第1章</span><span>雨夜.md</span><span class="close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="view-switch">
+      <button data-m="source">源码</button>
+      <button data-m="split" class="active">并排</button>
+      <button data-m="render">渲染</button>
+      <span class="sep"></span>
+      <button class="sync-btn active" title="同步滚动">⇅ 同步</button>
+    </div>
+  </div>
+
+  <div class="split">
+
+    <section class="pane source-pane" aria-label="Markdown 源码"><div class="line"><span class="no">1</span><span><span class="tk-fm-delim">---</span></span></div>
+<div class="line"><span class="no">2</span><span><span class="tk-fm-key">title</span><span class="tk-fm-delim">:</span> <span class="tk-fm-string">第一章 雨夜</span></span></div>
+<div class="line"><span class="no">3</span><span><span class="tk-fm-key">order</span><span class="tk-fm-delim">:</span> <span class="tk-fm-num">1</span></span></div>
+<div class="line"><span class="no">4</span><span><span class="tk-fm-key">pov</span><span class="tk-fm-delim">:</span> <span class="tk-fm-string">林晚</span></span></div>
+<div class="line"><span class="no">5</span><span><span class="tk-fm-key">status</span><span class="tk-fm-delim">:</span> <span class="tk-fm-string">draft</span></span></div>
+<div class="line"><span class="no">6</span><span><span class="tk-fm-key">characters</span><span class="tk-fm-delim">:</span> <span class="tk-fm-delim">[</span><span class="tk-fm-string">林晚</span><span class="tk-fm-delim">,</span> <span class="tk-fm-string">沈默</span><span class="tk-fm-delim">]</span></span></div>
+<div class="line"><span class="no">7</span><span><span class="tk-fm-key">locations</span><span class="tk-fm-delim">:</span> <span class="tk-fm-delim">[</span><span class="tk-fm-string">旧城区</span><span class="tk-fm-delim">]</span></span></div>
+<div class="line"><span class="no">8</span><span><span class="tk-fm-key">foreshadows</span><span class="tk-fm-delim">:</span></span></div>
+<div class="line"><span class="no">9</span><span>  <span class="tk-fm-delim">-</span> <span class="tk-fm-key">id</span><span class="tk-fm-delim">:</span> <span class="tk-fm-string">fs-umbrella</span>   <span class="tk-fm-key">due</span><span class="tk-fm-delim">:</span> <span class="tk-fm-num">12</span></span></div>
+<div class="line"><span class="no">10</span><span>  <span class="tk-fm-delim">-</span> <span class="tk-fm-key">id</span><span class="tk-fm-delim">:</span> <span class="tk-fm-string">fs-letter</span>     <span class="tk-fm-key">due</span><span class="tk-fm-delim">:</span> <span class="tk-fm-num">4</span></span></div>
+<div class="line"><span class="no">11</span><span><span class="tk-fm-delim">---</span></span></div>
+<div class="line"><span class="no">12</span><span></span></div>
+<div class="line"><span class="no">13</span><span><span class="tk-heading"># 第一章 雨夜</span></span></div>
+<div class="line"><span class="no">14</span><span></span></div>
+<div class="line"><span class="no">15</span><span>雨是从傍晚开始下的。</span></div>
+<div class="line"><span class="no">16</span><span></span></div>
+<div class="line"><span class="no">17</span><span>起初只是几滴，敲在铁皮棚顶上像谁在试探。到了七点，雨势陡然</span></div>
+<div class="line"><span class="no">18</span><span>大了起来，整条巷子被一层灰白的水雾罩住，路灯的光只能照到</span></div>
+<div class="line"><span class="no">19</span><span>脚下三步远的地方。<span class="tk-link">[[<span>林晚</span>]]</span>把伞压低了一些，沿着墙根往里走，</span></div>
+<div class="line"><span class="no">20</span><span>鞋尖已经湿透。</span></div>
+<div class="line"><span class="no">21</span><span></span></div>
+<div class="line"><span class="no">22</span><span>巷子尽头的旧茶馆还亮着灯。她记得三年前这里还不是这样的</span></div>
+<div class="line"><span class="no">23</span><span>——门口挂着褪色的布帘，帘子上印着「清风」二字，是<span class="tk-link">[[<span>沈默</span>]]</span></span></div>
+<div class="line"><span class="no">24</span><span>亲手写的。如今布帘换成了塑料的，字也没了，只剩下一道被</span></div>
+<div class="line"><span class="no">25</span><span>雨水冲刷得发白的痕迹。</span></div>
+<div class="line"><span class="no">26</span><span></span></div>
+<div class="line"><span class="no">27</span><span><span class="tk-comment">&lt;!-- 备注：这里要补一句林晚对茶馆的回忆，</span></span></div>
+<div class="line"><span class="no">28</span><span><span class="tk-comment">     为第 4 章沈默提到「上次修帘子」做铺垫。 --&gt;</span></span></div>
+<div class="line"><span class="no">29</span><span></span></div>
+<div class="line"><span class="no">30</span><span>她推门进去。风铃响了一声，<span class="tk-warn">闷闷的</span>，像被水浸过。</span></div>
+<div class="line"><span class="no">31</span><span></span></div>
+<div class="line"><span class="no">32</span><span>「你不该来。」</span></div>
+<div class="line cursor"><span class="no">33</span><span></span></div>
+<div class="line"><span class="no">34</span><span><span class="tk-ghost">他伸手接过伞，指尖触到她的目光——</span></span></div>
+<div class="line"><span class="no">35</span><span></span></div>
+<div class="line"><span class="no">36</span><span><span class="tk-marker">***</span></span></div>
+<div class="line"><span class="no">37</span><span></span></div>
+<div class="line"><span class="no">38</span><span>「我偏要来。」</span></div>
+    </section>
+
+    <section class="pane render-pane" aria-label="渲染预览">
+      <div style="width:100%; max-width:800px; position:relative;">
+        <div class="breadcrumb">
+          <span>卷一 · 雨夜</span><span class="sep">›</span><span class="cur">第一章 雨夜</span>
+          <span class="badge">Markdown 预览 · 与源码同步</span>
+        </div>
+        <article class="page">
+          <h1 class="chapter-title">第一章 雨夜</h1>
+          <div class="chapter-meta">
+            <span>视角 · 林晚</span><span>出场 · 林晚、沈默</span><span>地点 · 旧城区</span><span>草稿</span>
+          </div>
+          <p>雨是从傍晚开始下的。</p>
+          <p>起初只是几滴，敲在铁皮棚顶上像谁在试探。到了七点，雨势陡然大了起来，整条巷子被一层灰白的水雾罩住，路灯的光只能照到脚下三步远的地方。<span class="char-link" id="link-lin">林晚</span>把伞压低了一些，沿着墙根往里走，鞋尖已经湿透。</p>
+          <p>巷子尽头的旧茶馆还亮着灯。她记得三年前这里还不是这样的——门口挂着褪色的布帘，帘子上印着「清风」二字，是<span class="char-link">沈默</span>亲手写的。如今布帘换成了塑料的，字也没了，只剩下一道被雨水冲刷得发白的痕迹。</p>
+          <p>她推门进去。风铃响了一声，<span class="squiggle" id="warn-word">闷闷的</span>，像被水浸过。</p>
+          <p>「你不该来。」</p>
+          <p class="ghost">他伸手接过伞，指尖触到她的目光——<span class="hint"><kbd>Tab</kbd> 接受 · <kbd>Esc</kbd> 忽略</span></p>
+          <p class="scene-break">＊＊＊</p>
+          <p>「我偏要来。」</p>
+        </article>
+
+        <div class="hover-card" style="left: 380px; top: 230px;">
+          <div class="name">林晚 <span class="alias">别称 · 阿晚</span></div>
+          <div class="row"><span class="k">年龄</span><span class="v">27</span></div>
+          <div class="row"><span class="k">身份</span><span class="v">自由撰稿人</span></div>
+          <div class="row"><span class="k">性格</span><span class="v">克制 · 敏锐</span></div>
+          <div><span class="tag">情绪克制：高</span><span class="tag">知晓父亲的事</span></div>
+          <div class="foot"><span>出场 12 章</span><a>打开角色卡 →</a></div>
+        </div>
+
+        <div class="diag-pop" style="left: 300px; top: 470px;">
+          <div class="head"><span class="dot"></span>重复用词</div>
+          <div class="desc">「闷闷的」在本段出现两次，间隔 14 字。</div>
+          <div class="rule">novelpad/repeated-word</div>
+          <div class="btns"><button>删除后一处</button><button>换词建议</button><button class="ghost">忽略</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="status">
+    <div class="accent-bar"></div>
+    <div class="left">
+      <span>第 1 章 / 共 24 章</span><span class="sep">·</span>
+      <span>视角 · 林晚</span><span class="sep">·</span>
+      <span class="warn">草稿</span><span class="sep">·</span>
+      <span class="warn">⚠ 1 个警告</span><span class="sep">·</span>
+      <span class="ok">✓ 设定一致</span>
+    </div>
+    <div class="right">
+      <span>本章 3,210 字</span><span class="sep">·</span>
+      <span>全书 128,450 字</span><span class="sep">·</span>
+      <span class="item"><span class="dot" style="background:var(--accent)"></span>Copilot · GLM</span>
+    </div>
+  </footer>
+</div>
+
+<button class="theme-toggle" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? '' : 'dark'">夜墨</button>
+
+<script>
+  const app = document.getElementById('app');
+  document.querySelectorAll('.view-switch [data-m]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      app.dataset.mode = btn.dataset.m;
+      document.querySelectorAll('.view-switch [data-m]').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+  document.querySelector('.sync-btn').addEventListener('click', e => e.currentTarget.classList.toggle('active'));
+</script>
+</body>
+</html>
