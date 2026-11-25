@@ -1,0 +1,11 @@
+{
+  "name": "@novelpad/theme",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NovelPad 主题：宣纸（浅色）与 夜墨（深色），色值来自 docs/DESIGN.md 设计令牌",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "echo skip"
+  }
+}

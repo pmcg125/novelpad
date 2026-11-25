@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novelpad.dev/schemas/character-v1.json",
+  "title": "NovelPad 角色卡",
+  "description": "characters/*.yaml 的结构定义。所有字段均可选，但 name 必须有。",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "character", "description": "实体类型（固定）" },
+    "id": { "type": "string", "description": "实体 ID，默认为文件名去扩展名" },
+    "name": { "type": "string", "description": "显示名（必填）", "minLength": 1 },
+    "aliases": { "type": "array", "items": { "type": "string" }, "description": "别称，正文匹配与补全时会用到" },
+    "role": {
+      "type": "string",
+      "enum": ["protagonist", "antagonist", "supporting", "minor"],
+      "description": "定位：主角 / 对手 / 次要 / 路人"
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string", "description": "一句话简介（悬浮卡片显示）" },
+    "description": { "type": "string", "description": "详细描述" },
+    "attrs": {
+      "type": "object",
+      "description": "自定义属性（年龄、发色、习惯……），可被 lint 规则引用",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "relations": {
+      "type": "array",
+      "description": "关系声明（图谱权威层）",
+      "items": {
+        "type": "object",
+        "required": ["target"],
+        "additionalProperties": false,
+        "properties": {
+          "target": { "type": "string", "description": "对方实体名或 ID" },
+          "type": { "type": "string", "description": "关系描述，如「敌对 · 对峙」" },
+          "category": { "type": "string", "enum": ["ally", "enemy", "family", "neutral", "causal"], "description": "分类（图谱着色）" },
+          "note": { "type": "string" },
+          "source": { "type": "string", "enum": ["card", "ai"], "default": "card" },
+          "evidenceChapter": { "type": "integer", "minimum": 1 },
+          "confirmed": { "type": "boolean" }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "description": "随章节变化的状态",
+      "additionalProperties": false,
+      "properties": {
+        "emotion": { "type": "string" },
+        "location": { "type": "string" },
+        "knows": { "type": "array", "items": { "type": "string" }, "description": "该状态下知晓的信息" },
+        "since": { "type": "integer", "minimum": 1, "description": "生效章节 order" }
+      }
+    }
+  }
+}

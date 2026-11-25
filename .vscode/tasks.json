@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "novelpad: build extension",
+      "type": "npm",
+      "script": "build",
+      "path": "packages/extension",
+      "problemMatcher": "$tsc",
+      "group": "build"
+    },
+    {
+      "label": "novelpad: test all",
+      "type": "npm",
+      "script": "test",
+      "group": "test"
+    }
+  ]
+}

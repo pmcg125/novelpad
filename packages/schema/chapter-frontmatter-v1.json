@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novelpad.dev/schemas/chapter-frontmatter-v1.json",
+  "title": "NovelPad 章节 frontmatter",
+  "description": "chapters/*.md 顶部的 YAML 头",
+  "type": "object",
+  "required": ["title", "order"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "order": { "type": "integer", "minimum": 1, "description": "章节序号，决定合并顺序" },
+    "volume": { "type": "string", "description": "所属卷，如「卷一 · 雨夜」" },
+    "pov": { "type": "string", "description": "视角人物（必须是已有角色卡的角色）" },
+    "status": { "type": "string", "enum": ["draft", "revision", "final"], "default": "draft" },
+    "characters": { "type": "array", "items": { "type": "string" }, "description": "出场角色" },
+    "locations": { "type": "array", "items": { "type": "string" }, "description": "出场地点" },
+    "foreshadows": {
+      "type": "array",
+      "description": "本章埋下的伏笔",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "伏笔 ID，如 fs-umbrella" },
+          "due": { "type": "integer", "minimum": 1, "description": "应在此章序号前回收" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "resolves": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "本章回收的伏笔 ID"
+    },
+    "targetWords": { "type": "integer", "minimum": 0, "description": "本章目标字数" }
+  }
+}

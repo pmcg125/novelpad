@@ -13,6 +13,8 @@ out/
 coverage/
 .vitest/
 .vscode-test/
+.vscode-test/
+.e2e-runner.mjs
 
 # NovelPad 运行时索引（可重建）
 .novelpad/index/

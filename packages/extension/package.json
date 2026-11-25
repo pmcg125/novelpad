@@ -1,0 +1,223 @@
+{
+  "name": "novelpad",
+  "displayName": "NovelPad",
+  "description": "作家的 VS Code —— Markdown 小说创作、设定即代码、Novel Copilot、知识图谱",
+  "version": "0.0.1",
+  "publisher": "novelpad",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "novel",
+    "writing",
+    "fiction",
+    "markdown",
+    "worldbuilding"
+  ],
+  "icon": "assets/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:.novelpad",
+    "workspaceContains:chapters"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "novelpad",
+          "title": "NovelPad",
+          "icon": "assets/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "novelpad": [
+        {
+          "id": "novelpad.chapters",
+          "name": "章节",
+          "icon": "assets/chapters.svg"
+        },
+        {
+          "id": "novelpad.entities",
+          "name": "设定",
+          "icon": "assets/lore.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "novelpad.chapters",
+        "contents": "还没有打开作品。\n[新建作品](command:novelpad.initProject)\n[打开作品文件夹](command:vscode.openFolder)\n\n用 Markdown 写作：章节、角色、世界观都是文件。"
+      }
+    ],
+    "commands": [
+      {
+        "command": "novelpad.initProject",
+        "title": "NovelPad: 新建作品",
+        "icon": "$(add)"
+      },
+      {
+        "command": "novelpad.newChapter",
+        "title": "NovelPad: 新建章节",
+        "icon": "$(add)"
+      },
+      {
+        "command": "novelpad.newCharacter",
+        "title": "Novelpad: 新建角色",
+        "icon": "$(add)"
+      },
+      {
+        "command": "novelpad.openChapter",
+        "title": "NovelPad: 打开章节"
+      },
+      {
+        "command": "novelpad.openEntity",
+        "title": "NovelPad: 打开设定"
+      },
+      {
+        "command": "novelpad.exportTxt",
+        "title": "NovelPad: 导出 TXT"
+      },
+      {
+        "command": "novelpad.exportDocx",
+        "title": "NovelPad: 导出 Word"
+      },
+      {
+        "command": "novelpad.check",
+        "title": "NovelPad: 检查设定一致性"
+      },
+      {
+        "command": "novelpad.stats",
+        "title": "NovelPad: 字数统计"
+      },
+      {
+        "command": "novelpad.refresh",
+        "title": "NovelPad: 刷新",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "novelpad.newChapter",
+          "when": "view == novelpad.chapters",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelpad.refresh",
+          "when": "view == novelpad.chapters || view == novelpad.entities",
+          "group": "navigation@2"
+        },
+        {
+          "command": "novelpad.newCharacter",
+          "when": "view == novelpad.entities",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelpad.exportTxt",
+          "when": "view == novelpad.chapters",
+          "group": "1_export@1"
+        },
+        {
+          "command": "novelpad.exportDocx",
+          "when": "view == novelpad.chapters",
+          "group": "1_export@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "novelpad.newChapter",
+          "when": "view == novelpad.chapters",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "novelpad.openChapter",
+          "when": "false"
+        },
+        {
+          "command": "novelpad.openEntity",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "NovelPad",
+      "properties": {
+        "novelpad.exportProfile": {
+          "type": "string",
+          "enum": [
+            "default",
+            "submission",
+            "print"
+          ],
+          "default": "default",
+          "description": "默认导出 profile（可被作品 .novelpad/config.json 覆盖）。"
+        },
+        "novelpad.lintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "保存章节时运行 lint 并在问题面板显示。"
+        },
+        "novelpad.showWordCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "在状态栏显示当前章节字数与全书字数。"
+        }
+      }
+    },
+    "keybindings": [],
+    "themes": [
+      {
+        "label": "宣纸 · NovelPad Paper",
+        "uiTheme": "vs",
+        "path": "./themes/novelpad-paper-color-theme.json"
+      },
+      {
+        "label": "夜墨 · NovelPad Ink",
+        "uiTheme": "vs-dark",
+        "path": "./themes/novelpad-ink-color-theme.json"
+      }
+    ],
+    "yaml.schemas": {
+      "./schemas/character-v1.json": [
+        "characters/*.yaml",
+        "characters/*.yml"
+      ]
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": ".novelpad/config.json",
+        "url": "./schemas/project-config.schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "watch": "node ./scripts/build.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "package": "vsce package --no-dependencies",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@novelpad/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^2.26.0",
+    "esbuild": "^0.24.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

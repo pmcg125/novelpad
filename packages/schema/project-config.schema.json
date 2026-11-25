@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NovelPad 作品配置",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string", "description": "作品名" },
+    "author": { "type": "string", "description": "作者" },
+    "exportProfile": {
+      "type": "string",
+      "description": "默认导出 profile：内置 default / submission / print，或 .novelpad/profiles/<name>.json",
+      "default": "default"
+    },
+    "chaptersDir": { "type": "string", "default": "chapters", "description": "正文目录" },
+    "outlineDir": { "type": "string", "default": "outline", "description": "大纲目录" },
+    "rules": {
+      "type": "object",
+      "description": "lint 规则覆盖：true / false / \"error\" / \"warning\" / \"info\"",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "boolean" },
+          { "type": "string", "enum": ["error", "warning", "info"] }
+        ]
+      },
+      "properties": {
+        "novelpad/foreshadow-overdue": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/foreshadow-unknown": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/foreshadow-early": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/unknown-character": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/unknown-pov": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/unknown-location": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/duplicate-order": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/repeated-word": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/long-paragraph": { "$ref": "#/definitions/ruleSetting" },
+        "novelpad/unclosed-comment": { "$ref": "#/definitions/ruleSetting" }
+      }
+    }
+  },
+  "required": ["title"],
+  "definitions": {
+    "ruleSetting": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string", "enum": ["error", "warning", "info"] }
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@
     "clean": "pnpm -r --filter ./packages/* run clean"
   },
   "devDependencies": {
+    "@vscode/test-electron": "^3.1.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }
