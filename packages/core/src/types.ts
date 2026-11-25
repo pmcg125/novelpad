@@ -176,7 +176,7 @@ export interface ProjectConfig {
   /** 大纲目录，默认 outline */
   outlineDir?: string;
   /** 自定义 lint 规则开关 */
-  rules?: Record<string, boolean | "warn" | "error">;
+  rules?: Record<string, boolean | "error" | "warning" | "info">;
 }
 
 /** 扫描后的完整作品 */

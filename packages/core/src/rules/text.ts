@@ -14,10 +14,14 @@ export const repeatedWord: Rule = {
   run({ chapter, report }) {
     if (!chapter) return;
     const lines = chapter.content.split(/\r?\n/);
-    // 中文 2~4 字词，间隔 ≤ 12 字重复
-    const re = /([\u4e00-\u9fff]{2,4})[\u4e00-\u9fff，。、！？；：]{0,12}?\1/g;
-    // 常见虚词/通用搭配，忽略
-    const ignore = new Set(["一个", "一种", "一样", "不是", "没有", "可以", "什么", "自己", "这个", "那个", "已经", "还是", "就是"]);
+    // 同一行内、间隔 ≤ 5 个字（可含标点）的 2~4 字词重复
+    const re = /([\u4e00-\u9fff]{2,4})[\u4e00-\u9fff，。、！？；：]{0,6}?\1/g;
+    // 常见虚词 / 通用搭配，忽略
+    const ignore = new Set([
+      "一个", "一种", "一样", "不是", "没有", "可以", "什么", "自己", "这个", "那个", "已经", "还是", "就是",
+      "一只", "一张", "一把", "一阵", "一道", "一声", "一下", "一些", "一点", "一次",
+      "父亲", "母亲", "男人", "女人", "时候", "地方", "东西", "事情", "知道", "起来",
+    ]);
     lines.forEach((text, i) => {
       if (!text.trim() || text.trimStart().startsWith("<!--")) return;
       for (const m of text.matchAll(re)) {
@@ -27,7 +31,7 @@ export const repeatedWord: Rule = {
           rule: repeatedWord.meta.id,
           line: i + 1,
           column: (m.index ?? 0) + 1,
-          message: `「${w}」在本行重复出现`,
+          message: `「${w}」在本行间隔很近地重复出现`,
         });
       }
     });

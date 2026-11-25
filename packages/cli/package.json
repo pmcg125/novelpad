@@ -1,0 +1,27 @@
+{
+  "name": "@novelpad/cli",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NovelPad 命令行：export / check / stats",
+  "type": "module",
+  "bin": {
+    "novelpad": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --sourcemap --clean --shims",
+    "dev": "tsup src/cli.ts --format esm --sourcemap --watch --shims",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@novelpad/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
