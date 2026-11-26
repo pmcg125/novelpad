@@ -83,7 +83,23 @@ shell/         VS Code 源码定制层（M6 启用）
 - [x] M0 基建：monorepo、章节模型、frontmatter 解析
 - [x] M1 导出：TXT / DOCX + Profile + CLI
 - [x] M2 设定库：树视图、lint 诊断、补全 / 悬浮 / 跳转、Schema、主题
-- [x] M3 Novel Copilot：续写 / 改写 / 设定问答 / 角色卡草稿
-- [ ] M4 RAG
+- [x] M3 Novel Copilot：续写 / 改写 / 设定问答 / 角色卡草稿；推理过程可见、小说家式思考
+- [x] M4 RAG + 决策：Embedding + 向量索引 + Rerank；decision-model 正文审查 / 续写前预判 / 冲突裁决
+- [ ] M5 图谱
+- [ ] M6 壳（源码定制）
+
+## RAG 与决策模型
+
+需要阿里云百炼（DashScope）API Key，在设置 `novelpad.rag.apiKey` 填入（Embedding / Rerank / 决策模型共用）。
+
+| 功能 | 入口 | 说明 |
+|---|---|---|
+| 建立向量索引 | 命令「建立向量索引（RAG）」 | 章节 / 设定 / 世界观 / 大纲全部分块嵌入，增量更新；状态栏显示索引块数 |
+| 检索 | 命令「检索相似场景与设定」 | 向量召回 → `qwen3.7-text-rerank` 精排 → QuickPick 跳转 |
+| 续写时自动注入 | 续写命令（`Alt+\`） | RAG 检索相似段落 + 决策模型预判人物情绪 / 节奏 / 位置一致性 → 注入 prompt |
+| 审查本章 | 命令「决策模型审查本章」 | `decision-model` 分段判断 OOC / 视角越界 / 设定矛盾 / AI 腔 → Problems |
+| 裁决冲突 | 选中含多版本的冲突文本 → 「决策模型裁决选中冲突」 | 解析版本与来源 → 概率表 + 置信度 + 是否可直接定稿 |
+
+`examples/cannian/` 是一套真实的 OC / 世界观语料（17 份文档、引用溯源、48 项冲突清单），用于验证检索与裁决质量。
 - [ ] M5 图谱
 - [ ] M6 壳（源码定制）
