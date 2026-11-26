@@ -93,6 +93,12 @@ export interface ContinuationRequest {
   /** 用户额外的指示，如「让沈默进门」 */
   hint?: string;
   maxTokens?: number;
+  /** RAG 检索到的相关设定 / 相似场景（已格式化文本） */
+  retrieved?: string;
+  /** 决策模型给出的续写约束（如情绪 / 节奏） */
+  preConstraints?: string[];
+  /** 决策判断的各角色情绪 */
+  preEmotions?: Record<string, { choice: string; confidence: number }>;
 }
 
 /** 续写请求 */
@@ -101,8 +107,14 @@ export function buildContinuationMessages(req: ContinuationRequest): ChatMessage
   const user: string[] = [];
   if (ctx.prevChapterTail) user.push(`【上一章结尾】\n${ctx.prevChapterTail}\n`);
   if (ctx.styleSamples.length) user.push(`【你之前写的文字（保持这个手感）】\n${ctx.styleSamples.join("\n……\n")}\n`);
+  if (req.retrieved) user.push(`【你翻了一下设定本和旧稿，找到这些相关段落】\n${req.retrieved}`);
   user.push(`【当前章草稿（写到这里停笔）】\n${ctx.recentText}\n`);
   user.push("从这里接着往下写一小段（两三百字），到一个可以停笔的地方收。不要重复已有内容，不要解释，只给正文。");
+  if (req.preEmotions && Object.keys(req.preEmotions).length) {
+    const e = Object.entries(req.preEmotions).filter(([, v]) => v.confidence > 0.5).map(([k, v]) => `${k}：${v.choice}`);
+    if (e.length) user.push(`（你心里清楚此刻的人物状态：${e.join("，")}）`);
+  }
+  if (req.preConstraints?.length) user.push(`（写作时注意：${req.preConstraints.join("；")}）`);
   if (req.hint) user.push(`另一位作者的批注：${req.hint}`);
   return [
     { role: "system", content: buildSystemPrompt(ctx) },

@@ -143,6 +143,27 @@ module.exports.run = async function () {
     log(!!reasonTitle, "思考过程面板已打开: " + reasonTitle);
     await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
   });
+
+  // 6. RAG + 决策（需要 DashScope key）
+  await step(skipIf(!LLM_TEST)("RAG 建索引（DashScope embedding）"), async () => {
+    const c = vscode.workspace.getConfiguration();
+    await c.update("novelpad.rag.apiKey", "DASHSCOPE_KEY_REDACTED", vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand("novelpad.rag.rebuild");
+    await new Promise(r => setTimeout(r, 8000));
+    let ok = false;
+    let sizeKb = 0;
+    try {
+      const st = await vscode.workspace.fs.stat(vscode.Uri.joinPath(vscode.Uri.file(${JSON.stringify(demo)}), ".novelpad", "index", "vectors.json"));
+      ok = st.type === vscode.FileType.File;
+      sizeKb = Math.round(st.size / 1024);
+    } catch { /* not created */ }
+    log(ok, "索引文件已生成" + (ok ? " (" + sizeKb + " KB)" : ""));
+    if (ok) {
+      await vscode.commands.executeCommand("novelpad.decision.test");
+      await new Promise(r => setTimeout(r, 3000));
+      log(true, "决策模型连接测试已执行");
+    }
+  });
 };
 `;
 

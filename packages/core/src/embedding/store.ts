@@ -28,8 +28,8 @@ export interface Chunk {
 export type ChunkMeta =
   | { kind: "chapter"; file: string; order: number; title: string; index: number; characters?: string[]; locations?: string[] }
   | { kind: "entity"; file: string; entity: string; entityKind: string; section?: string }
-  | { kind: "lore"; file: string; title: string }
-  | { kind: "outline"; file: string; title: string };
+  | { kind: "lore"; file: string; title: string; section?: string }
+  | { kind: "outline"; file: string; title: string; section?: string };
 
 /** 按 Markdown 标题切块（设定 / 大纲） */
 export function chunkByHeadings<B extends { kind: "entity" | "lore" | "outline"; file: string }>(

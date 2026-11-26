@@ -3,10 +3,12 @@
  * 推理模型响应慢，用 status bar 进度提示而不是让用户以为卡死。
  */
 import * as vscode from "vscode";
-import { assembleContext, continueStory } from "@novelpad/core";
+import { assembleContext, continueStory, preContinuation, type AssembledContext, type Chapter } from "@novelpad/core";
+import type { DecisionProvider } from "@novelpad/core";
 import type { ProjectStore } from "../store";
 import { CopilotConfig } from "./config";
 import { reasoningStatusBar, type ReasoningEntry } from "./reasoning";
+import { RagManager } from "../rag/manager";
 
 /** 把文档文本按光标切分，得到 frontmatter 之后的正文偏移 */
 function splitAtCursor(doc: vscode.TextDocument, cursor: vscode.Position): { before: string; offset: number } {
@@ -31,6 +33,9 @@ export class ContinuationFeature {
   private status: vscode.StatusBarItem;
   private reasoningItem: vscode.Disposable | undefined;
   private running = false;
+  /** 外部注入：RAG 与决策 */
+  rag: RagManager | undefined;
+  decider: DecisionProvider | undefined;
 
   constructor(
     private readonly store: ProjectStore,
@@ -43,6 +48,43 @@ export class ContinuationFeature {
 
   get isRunning(): boolean {
     return this.running;
+  }
+
+  /** 续写前的准备：RAG 检索 + 决策判断，返回注入项 */
+  async prepare(
+    liveChapter: Chapter,
+    before: string,
+    ctx: AssembledContext,
+  ): Promise<{ retrieved?: string; preConstraints?: string[]; preEmotions?: Record<string, { choice: string; confidence: number }> }> {
+    const out: { retrieved?: string; preConstraints?: string[]; preEmotions?: Record<string, { choice: string; confidence: number }> } = {};
+    const c = vscode.workspace.getConfiguration();
+    const chars = ctx.characters.map((x) => x.name);
+
+    // RAG：用光标前最近文字做查询，找相似场景和相关设定
+    if (c.get<boolean>("novelpad.rag.enabled", true) && this.rag?.isIndexed) {
+      try {
+        const query = before.replace(/\s+/g, " ").slice(-200);
+        const hits = await this.rag.search(query, { topK: 4 });
+        if (hits.length) out.retrieved = RagManager.formatHits(hits, 1500);
+      } catch {
+        /* RAG 失败不影响续写 */
+      }
+    }
+
+    // 决策：各角色情绪 / 节奏 / 位置一致性
+    if (c.get<boolean>("novelpad.decision.enabled", true) && this.decider) {
+      try {
+        const entities = this.store.project?.entities.filter((e) => e.kind === "character" && chars.includes(e.name)) ?? [];
+        if (entities.length) {
+          const r = await preContinuation(this.decider, { chapter: liveChapter, characters: entities, recentText: before.slice(-600) });
+          out.preConstraints = r.constraints;
+          out.preEmotions = Object.fromEntries(Object.entries(r.verdict.emotions).map(([k, v]) => [k, { choice: v.choice, confidence: v.confidence }]));
+        }
+      } catch {
+        /* 决策失败不影响续写 */
+      }
+    }
+    return out;
   }
 
   /** 主入口：从当前光标续写 */
@@ -72,10 +114,13 @@ export class ContinuationFeature {
     const cursor = editor.selection.active;
 
     this.running = true;
+    this.status.text = "$(sparkle) 翻设定、推人物…";
     this.status.show();
     try {
       const { provider } = await this.config.provider("continue");
-      const out = await continueStory(provider, { ctx, hint });
+      this.status.text = "$(sparkle) 思考中…";
+      const extra = await this.prepare(liveChapter, before, ctx);
+      const out = await continueStory(provider, { ctx, hint, ...extra });
       const clean = out.result.trim();
       if (!clean) {
         void vscode.window.showInformationMessage("Novel Copilot 没有返回内容，再试一次？");

@@ -10,7 +10,7 @@ import { QaFeature, collectFacts } from "./qa";
 import { showReasoning } from "./reasoning";
 import type { ProjectStore } from "../store";
 
-export function registerCopilot(context: vscode.ExtensionContext, store: ProjectStore): void {
+export function registerCopilot(context: vscode.ExtensionContext, store: ProjectStore): { continuation: ContinuationFeature } {
   const config = new CopilotConfig(context.secrets);
   const continuation = new ContinuationFeature(store, config);
   const edit = new EditActions(store, config);
@@ -85,6 +85,7 @@ export function registerCopilot(context: vscode.ExtensionContext, store: Project
     ),
   ];
   context.subscriptions.push(...d);
+  return { continuation };
 }
 
 async function askHint(): Promise<string | undefined> {

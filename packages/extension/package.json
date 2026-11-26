@@ -141,6 +141,32 @@
         "icon": "$(lightbulb)"
       },
       {
+        "command": "novelpad.rag.rebuild",
+        "title": "NovelPad: 建立向量索引（RAG）",
+        "icon": "$(database)"
+      },
+      {
+        "command": "novelpad.rag.search",
+        "title": "NovelPad: 检索相似场景与设定"
+      },
+      {
+        "command": "novelpad.decision.review",
+        "title": "NovelPad: 决策模型审查本章（OOC / 视角 / 设定矛盾）",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "novelpad.decision.clear",
+        "title": "NovelPad: 清除审查结果"
+      },
+      {
+        "command": "novelpad.decision.resolve",
+        "title": "NovelPad: 决策模型裁决选中冲突"
+      },
+      {
+        "command": "novelpad.decision.test",
+        "title": "NovelPad: 决策模型连接测试"
+      },
+      {
         "command": "novelpad._test.setApiKey",
         "title": "NovelPad: (internal) set api key"
       },
@@ -273,6 +299,57 @@
           "type": "number",
           "default": 90000,
           "description": "请求超时（毫秒）。推理模型建议 ≥ 60000。"
+        },
+        "novelpad.rag.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "续写前检索相似场景与相关设定注入上下文。"
+        },
+        "novelpad.rag.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "阿里云 DashScope API Key（Embedding / Rerank / 决策模型共用）。"
+        },
+        "novelpad.rag.workspaceId": {
+          "type": "string",
+          "default": "WORKSPACE_REDACTED",
+          "description": "百炼业务空间 ID（Rerank 与决策模型需要）。"
+        },
+        "novelpad.rag.embeddingModel": {
+          "type": "string",
+          "default": "qwen3.7-text-embedding-flash",
+          "description": "向量模型。"
+        },
+        "novelpad.rag.rerank": {
+          "type": "boolean",
+          "default": true,
+          "description": "检索后用 qwen3.7-text-rerank 精排。"
+        },
+        "novelpad.rag.rerankModel": {
+          "type": "string",
+          "default": "qwen3.7-text-rerank",
+          "description": "精排模型。"
+        },
+        "novelpad.rag.topK": {
+          "type": "number",
+          "default": 5,
+          "description": "检索返回段落数。"
+        },
+        "novelpad.decision.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "续写前用决策模型预判人物情绪 / 节奏 / 位置一致性。"
+        },
+        "novelpad.decision.workspaceId": {
+          "type": "string",
+          "default": "WORKSPACE_REDACTED",
+          "description": "百炼业务空间 ID。"
+        },
+        "novelpad.decision.model": {
+          "type": "string",
+          "enum": ["decision-model", "decision-model-preview"],
+          "default": "decision-model",
+          "description": "决策模型。"
         }
       }
     },

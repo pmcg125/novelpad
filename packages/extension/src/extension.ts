@@ -9,6 +9,7 @@ import { Linter } from "./features/linter";
 import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
 import { registerCopilot } from "./copilot";
+import { registerRagAndDecision } from "./decision";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -26,7 +27,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // Novel Copilot
-  registerCopilot(context, store);
+  const copilot = registerCopilot(context, store);
+
+  // RAG + 决策模型（注入 Copilot）
+  registerRagAndDecision(context, store, copilot.continuation);
 
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
