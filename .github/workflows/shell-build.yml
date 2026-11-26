@@ -15,6 +15,38 @@ on:
         default: "all"
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.up.outputs.tag }}
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 读上游版本
+        id: up
+        shell: bash
+        run: echo "tag=$(cat shell/UPSTREAM)" >> "$GITHUB_OUTPUT"
+
+      - name: 生成构建矩阵
+        id: m
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          ALL='[
+            {"name":"windows","os":"windows-latest","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},
+            {"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"},
+            {"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}
+          ]'
+          case "$PLATFORM" in
+            win32|windows) SEL='[{"name":"windows","os":"windows-latest","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]' ;;
+            linux)         SEL='[{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"}]' ;;
+            darwin|macos)  SEL='[{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]' ;;
+            *)             SEL="$ALL" ;;
+          esac
+          echo "matrix={\"include\":$SEL}" >> "$GITHUB_OUTPUT"
+
   build-extension:
     runs-on: ubuntu-latest
     steps:
@@ -35,46 +67,21 @@ jobs:
           retention-days: 7
 
   shell:
-    needs: build-extension
+    needs: [prepare, build-extension]
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: windows
-            os: windows-latest
-            gulp: vscode-win32-x64
-            archive: zip
-          - name: linux
-            os: ubuntu-latest
-            gulp: vscode-linux-x64
-            archive: tar.gz
-          - name: macos
-            os: macos-latest
-            gulp: vscode-darwin-arm64
-            archive: zip
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
-
-      - name: 读上游版本
-        id: upstream
-        run: echo "tag=$(cat shell/UPSTREAM)" >> $GITHUB_OUTPUT
-
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
 
       - name: 检出上游源码
         uses: actions/checkout@v4
         with:
           repository: microsoft/vscode
-          ref: ${{ steps.upstream.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.tag }}
           path: upstream
           fetch-depth: 1
 
@@ -83,23 +90,55 @@ jobs:
 
       - name: 上游要求的 Node 版本
         id: nvm
+        shell: bash
+        run: echo "version=$(cat upstream/.nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: 检测上游包管理器
+        id: pm
+        shell: bash
         run: |
-          echo "version=$(cat upstream/.nvmrc)" >> $GITHUB_OUTPUT
+          if [ -f upstream/pnpm-lock.yaml ]; then
+            echo "install=pnpm install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lock=upstream/pnpm-lock.yaml" >> "$GITHUB_OUTPUT"
+          elif [ -f upstream/yarn.lock ]; then
+            echo "install=yarn install --frozen-lockfile --network-timeout 600000" >> "$GITHUB_OUTPUT"
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lock=upstream/yarn.lock" >> "$GITHUB_OUTPUT"
+          elif [ -f upstream/package-lock.json ]; then
+            echo "install=npm ci" >> "$GITHUB_OUTPUT"
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lock=upstream/package-lock.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "未找到锁文件" >&2
+            exit 1
+          fi
+
+      # 上游若改用 pnpm，先装对应版本（setup-node 的 pnpm 缓存需要它）
+      - uses: pnpm/action-setup@v4
+        if: steps.pm.outputs.cache == 'pnpm'
+        with:
+          package_json_file: upstream/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.nvm.outputs.version }}
-          cache: pnpm
-          cache-dependency-path: upstream/pnpm-lock.yaml
+          cache: ${{ steps.pm.outputs.cache }}
+          cache-dependency-path: ${{ steps.pm.outputs.lock }}
 
       - name: 安装依赖
         working-directory: upstream
+        shell: bash
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         run: |
           npm i -g node-gyp
-          pnpm install --frozen-lockfile
+          ${{ steps.pm.outputs.install }}
 
       - name: 构建（gulp ${{ matrix.gulp }}）
         working-directory: upstream
+        shell: bash
         run: npx gulp ${{ matrix.gulp }}
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
@@ -109,8 +148,13 @@ jobs:
         id: out
         shell: bash
         run: |
-          dir=$(ls -d ../*-${{ matrix.name }}* 2>/dev/null | head -1 || true)
-          echo "dir=$dir" >> $GITHUB_OUTPUT
+          dir="${{ matrix.out }}"
+          if [ ! -d "$dir" ]; then
+            echo "找不到产物目录 $dir，当前目录内容：" >&2
+            ls -la >&2
+            exit 1
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
           echo "产物：$dir"
 
       - name: 下载 .vsix
@@ -118,20 +162,26 @@ jobs:
         with: { name: novelpad-vsix }
 
       - name: 塞入 NovelPad 扩展
-        if: steps.out.outputs.dir != ''
-        run: node shell/scripts/embed-extension.mjs "${{ steps.out.outputs.dir }}/resources/app" novelpad.vsix
+        run: node shell/scripts/embed-extension.mjs "${{ matrix.out }}/resources/app" novelpad.vsix
 
       - name: 打包
-        if: steps.out.outputs.dir != ''
         shell: bash
         run: |
-          cd "$(dirname '${{ steps.out.outputs.dir }}')"
-          name=$(basename '${{ steps.out.outputs.dir }}')
-          if [ "${{ matrix.archive }}" = "zip" ]; then zip -qr "NovelPad-${{ steps.upstream.outputs.tag }}-${name}.zip" "$name"; else tar -czf "NovelPad-${{ steps.upstream.outputs.tag }}-${name}.tar.gz" "$name"; fi
-          mv NovelPad-* ../../
+          tag="${{ needs.prepare.outputs.tag }}"
+          out="${{ matrix.out }}"
+          base="NovelPad-$tag-${{ matrix.name }}"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            if command -v 7z >/dev/null 2>&1; then
+              7z a -tzip -mx=1 "$base.zip" "$out" >/dev/null
+            else
+              zip -qr "$base.zip" "$out"
+            fi
+          else
+            tar -czf "$base.tar.gz" "$out"
+          fi
+          ls -lh NovelPad-*
 
       - uses: actions/upload-artifact@v4
-        if: steps.out.outputs.dir != ''
         with:
           name: NovelPad-${{ matrix.name }}
           path: NovelPad-*
@@ -146,7 +196,8 @@ jobs:
         with: { node-version: 20 }
       - name: 读上游版本
         id: upstream
-        run: echo "tag=$(cat shell/UPSTREAM)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: echo "tag=$(cat shell/UPSTREAM)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: microsoft/vscode

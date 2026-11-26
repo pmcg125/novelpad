@@ -22,7 +22,15 @@ if (!fs.existsSync(path.join(upstream, "package.json"))) {
 
 const log = (s) => console.log(`[apply] ${s}`);
 
-/* ---------- 1. overlay：整文件覆盖 ---------- */
+/* 深度合并：对象递归合并，数组/标量由 overlay 直接替换 */
+const merge = (base, over) => {
+  if (Array.isArray(over) || over === null || typeof over !== "object") return over;
+  const out = base && typeof base === "object" && !Array.isArray(base) ? { ...base } : {};
+  for (const [k, v] of Object.entries(over)) out[k] = merge(out[k], v);
+  return out;
+};
+
+/* ---------- 1. overlay：product.json 合并，其余整文件覆盖 ---------- */
 const overlay = path.join(shellRoot, "overlay");
 let overlaid = 0;
 if (fs.existsSync(overlay)) {
@@ -33,9 +41,17 @@ if (fs.existsSync(overlay)) {
       else {
         const to = path.join(upstream, r);
         fs.mkdirSync(path.dirname(to), { recursive: true });
-        fs.copyFileSync(path.join(dir, e.name), to);
+        if (r === "product.json" && fs.existsSync(to)) {
+          // 上游 product.json 有 win32*/server* 等构建必需字段，不能整体覆盖
+          const from = path.join(dir, e.name);
+          const merged = merge(JSON.parse(fs.readFileSync(to, "utf8")), JSON.parse(fs.readFileSync(from, "utf8")));
+          fs.writeFileSync(to, JSON.stringify(merged, null, 2) + "\n");
+          log(`overlay ${r}（与上游深度合并）`);
+        } else {
+          fs.copyFileSync(path.join(dir, e.name), to);
+          log(`overlay ${r}`);
+        }
         overlaid++;
-        log(`overlay ${r}`);
       }
     }
   };
@@ -46,7 +62,7 @@ if (fs.existsSync(overlay)) {
 // 上游 product.json 里有 version/commit 等构建期字段，overlay 已覆盖；这里确保 commit 占位存在
 const productPath = path.join(upstream, "product.json");
 const product = JSON.parse(fs.readFileSync(productPath, "utf8"));
-if (!product.version) product.version = "0.0.0";
+if (!product.version) product.version = JSON.parse(fs.readFileSync(path.join(upstream, "package.json"), "utf8")).version ?? "0.0.0";
 if (!product.commit) product.commit = "novelpad";
 if (!product.date) product.date = new Date().toISOString();
 if (!product.quality) product.quality = "stable";
