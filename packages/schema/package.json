@@ -1,0 +1,13 @@
+{
+  "name": "@novelpad/schema",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NovelPad JSON Schema：角色卡 / 章节 frontmatter / 项目配置",
+  "license": "MIT",
+  "files": ["*.json"],
+  "scripts": {
+    "build": "echo \"schema: static, nothing to build\"",
+    "typecheck": "echo skip",
+    "test": "echo \"schema: no tests\""
+  }
+}
