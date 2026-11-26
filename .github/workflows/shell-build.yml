@@ -127,6 +127,10 @@ jobs:
         with:
           node-version: ${{ steps.nvm.outputs.version }}
 
+      # 上游 1.85 的 node-gyp 9.3.1 需要 Python <= 3.11（3.12 起没有 distutils）
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
       - name: 安装依赖
         working-directory: upstream
         shell: bash
