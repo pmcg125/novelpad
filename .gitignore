@@ -27,6 +27,10 @@ coverage/
 # 上游源码（shell 构建时拉取）
 shell/vscode/
 
+# 环境变量（含密钥）
+.env
+.env.local
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db
