@@ -6,3 +6,5 @@ export * from "./project.js";
 export * from "./rules/index.js";
 export * from "./export/index.js";
 export * from "./llm/index.js";
+export * from "./decision/index.js";
+export * from "./embedding/index.js";
