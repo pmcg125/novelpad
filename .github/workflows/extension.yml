@@ -1,0 +1,80 @@
+name: Extension CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["shell/**", "docs/**", "**.md"]
+  pull_request:
+    paths-ignore: ["shell/**", "docs/**", "**.md"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      # 真实模型测试默认跳过；PR 和 main 都不调用外部 API
+      NOVLEPAD_LLM_TEST: "0"
+      NOVLEPAD_EMBED_TEST: "0"
+      NOVLEPAD_DECISION_TEST: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Package extension (.vsix)
+        working-directory: packages/extension
+        run: |
+          npx @vscode/vsce package --no-dependencies --allow-missing-repository -o ../../novelpad.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: novelpad-vsix
+          path: novelpad.vsix
+          retention-days: 14
+
+  e2e:
+    name: E2E (VS Code host)
+    runs-on: windows-latest
+    needs: test
+    env:
+      NOVLEPAD_LLM_TEST: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run e2e against downloaded VS Code
+        env:
+          # 让脚本下载测试版（CI 上没有本机安装的 VS Code）
+          NOVLEPAD_USE_REMOTE_VSCODE: "1"
+        run: node packages/extension/scripts/e2e.mjs
