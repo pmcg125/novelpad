@@ -123,8 +123,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.nvm.outputs.version }}
-          cache: ${{ steps.pm.outputs.cache }}
-          cache-dependency-path: ${{ steps.pm.outputs.lock }}
 
       - name: 安装依赖
         working-directory: upstream
