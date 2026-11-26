@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Package .vsix
+        working-directory: packages/extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository -o ../../novelpad.vsix
+
+      # 壳产物由 Shell Build（tag 触发）产出；这里等待并下载
+      - name: 等待壳构建完成
+        run: |
+          for i in $(seq 1 60); do
+            status=$(gh run list --workflow "Shell Build" --limit 1 --json status -q '.[0].status' || echo "")
+            [ "$status" = "completed" ] && break
+            sleep 60
+          done
+
+      - name: 下载壳产物
+        continue-on-error: true
+        run: |
+          run=$(gh run list --workflow "Shell Build" --limit 1 --json databaseId -q '.[0].databaseId')
+          for name in NovelPad-windows NovelPad-linux NovelPad-macos; do
+            gh run download $run -n $name -D dist/ || true
+          done
+          ls -la dist/ || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上游版本
+        id: up
+        run: echo "tag=$(cat shell/UPSTREAM)" >> $GITHUB_OUTPUT
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: NovelPad ${{ github.ref_name }}（基于 VS Code ${{ steps.up.outputs.tag }}）
+          files: |
+            novelpad.vsix
+            dist/*
+          generate_release_notes: true
+          body: |
+            ## 安装
+            - **完整版**（NovelPad 壳）：下载对应平台的压缩包，解压即用
+            - **扩展版**（装到标准 VS Code / VSCodium / Cursor）：下载 `novelpad.vsix`，命令面板「从 VSIX 安装」
+
+            > 本产品基于 [VS Code](https://github.com/microsoft/vscode)（MIT），与 Microsoft 无关。
+
+            ## 配置
+            1. 命令面板「NovelPad: Copilot 设置 API Key」填 LLM key；设置项 `novelpad.copilot.baseUrl` 填 OpenAI 兼容地址
+            2. 如需 RAG / 决策模型：设置 `novelpad.rag.apiKey` 填阿里云 DashScope key
+            3. 命令「NovelPad: 建立向量索引」

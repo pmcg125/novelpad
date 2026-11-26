@@ -1,0 +1,37 @@
+{
+  "nameShort": "NovelPad",
+  "nameLong": "NovelPad",
+  "applicationName": "novelpad",
+  "dataFolderName": ".novelpad-ide",
+  "win32AppUserModelId": "dev.novelpad.NovelPad",
+  "win32MutexName": "novelpad",
+  "darwinBundleIdentifier": "dev.novelpad.NovelPad",
+  "linuxIconName": "novelpad",
+  "urlProtocol": "novelpad",
+  "documentationUrl": "https://github.com/pmcg125/novelpad",
+  "keyboardShortcutsUrlMac": "https://github.com/pmcg125/novelpad",
+  "keyboardShortcutsUrlLinux": "https://github.com/pmcg125/novelpad",
+  "keyboardShortcutsUrlWin": "https://github.com/pmcg125/novelpad",
+  "introductoryVideosUrl": "https://github.com/pmcg125/novelpad",
+  "tipsAndTricksUrl": "https://github.com/pmcg125/novelpad",
+  "newsletterUrl": "https://github.com/pmcg125/novelpad",
+  "privacyStatementUrl": "https://github.com/pmcg125/novelpad",
+  "showTelemetryOptOut": true,
+  "telemetryAppId": "",
+  "telemetryExtensionAppId": "",
+  "extensionEnabledApiProposals": {},
+  "builtInExtensions": [],
+  "extensionKind": {
+    "novelpad.novelpad": ["workspace"]
+  },
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/namespace/{publisher}/{name}",
+    "resourceUrlTemplate": "https://open-vsx.org/asset/{publisher}/{name}/{version}/Microsoft.VisualStudio.Services.Icons.Default"
+  },
+  "linkProtectionTrustedDomains": [
+    "https://open-vsx.org",
+    "https://github.com",
+    "https://dashscope.aliyuncs.com"
+  ]
+}

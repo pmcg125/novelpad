@@ -1,0 +1,157 @@
+name: Shell Build
+
+# 构建定制 VS Code 壳：上游源码 → overlay + patches → gulp 构建 → 塞入扩展 → 产物
+# 首次构建约 40~60 分钟/平台。只在 shell/ 或扩展变动、手动触发、打 tag 时运行。
+
+on:
+  push:
+    branches: [main]
+    paths: ["shell/**", "packages/extension/**", "packages/core/**", ".github/workflows/shell-build.yml"]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "构建平台（all / win32 / linux / darwin）"
+        default: "all"
+  push_tags:
+    tags: ["v*"]
+
+jobs:
+  build-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Package .vsix
+        working-directory: packages/extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository -o ../../novelpad.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: novelpad-vsix
+          path: novelpad.vsix
+          retention-days: 7
+
+  shell:
+    needs: build-extension
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            gulp: vscode-win32-x64
+            archive: zip
+          - name: linux
+            os: ubuntu-latest
+            gulp: vscode-linux-x64
+            archive: tar.gz
+          - name: macos
+            os: macos-latest
+            gulp: vscode-darwin-arm64
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+
+      - name: 读上游版本
+        id: upstream
+        run: echo "tag=$(cat shell/UPSTREAM)" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: 检出上游源码
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vscode
+          ref: ${{ steps.upstream.outputs.tag }}
+          path: upstream
+          fetch-depth: 1
+
+      - name: 应用 overlay 与 patches
+        run: node shell/scripts/apply.mjs upstream
+
+      - name: 上游要求的 Node 版本
+        id: nvm
+        run: |
+          echo "version=$(cat upstream/.nvmrc)" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.nvm.outputs.version }}
+          cache: pnpm
+          cache-dependency-path: upstream/pnpm-lock.yaml
+
+      - name: 安装依赖
+        working-directory: upstream
+        run: |
+          npm i -g node-gyp
+          pnpm install --frozen-lockfile
+
+      - name: 构建（gulp ${{ matrix.gulp }}）
+        working-directory: upstream
+        run: npx gulp ${{ matrix.gulp }}
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: 定位产物目录
+        id: out
+        shell: bash
+        run: |
+          dir=$(ls -d ../*-${{ matrix.name }}* 2>/dev/null | head -1 || true)
+          echo "dir=$dir" >> $GITHUB_OUTPUT
+          echo "产物：$dir"
+
+      - name: 下载 .vsix
+        uses: actions/download-artifact@v4
+        with: { name: novelpad-vsix }
+
+      - name: 塞入 NovelPad 扩展
+        if: steps.out.outputs.dir != ''
+        run: node shell/scripts/embed-extension.mjs "${{ steps.out.outputs.dir }}/resources/app" novelpad.vsix
+
+      - name: 打包
+        if: steps.out.outputs.dir != ''
+        shell: bash
+        run: |
+          cd "$(dirname '${{ steps.out.outputs.dir }}')"
+          name=$(basename '${{ steps.out.outputs.dir }}')
+          if [ "${{ matrix.archive }}" = "zip" ]; then zip -qr "NovelPad-${{ steps.upstream.outputs.tag }}-${name}.zip" "$name"; else tar -czf "NovelPad-${{ steps.upstream.outputs.tag }}-${name}.tar.gz" "$name"; fi
+          mv NovelPad-* ../../
+
+      - uses: actions/upload-artifact@v4
+        if: steps.out.outputs.dir != ''
+        with:
+          name: NovelPad-${{ matrix.name }}
+          path: NovelPad-*
+          retention-days: 30
+
+  patch-check:
+    # 补丁可重放性检查：不编译，只 apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: 读上游版本
+        id: upstream
+        run: echo "tag=$(cat shell/UPSTREAM)" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vscode
+          ref: ${{ steps.upstream.outputs.tag }}
+          path: upstream
+          fetch-depth: 1
+      - run: node shell/scripts/apply.mjs upstream
