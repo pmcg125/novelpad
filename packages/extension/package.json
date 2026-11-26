@@ -352,7 +352,7 @@
         },
         "novelpad.rag.workspaceId": {
           "type": "string",
-          "default": "WORKSPACE_REDACTED",
+          "default": "",
           "description": "百炼业务空间 ID（Rerank 与决策模型需要）。"
         },
         "novelpad.rag.embeddingModel": {
@@ -382,7 +382,7 @@
         },
         "novelpad.decision.workspaceId": {
           "type": "string",
-          "default": "WORKSPACE_REDACTED",
+          "default": "",
           "description": "百炼业务空间 ID。"
         },
         "novelpad.decision.model": {

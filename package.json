@@ -10,10 +10,10 @@
   },
   "packageManager": "pnpm@12.6.0",
   "scripts": {
-    "build": "pnpm -r --filter ./packages/* run build",
-    "test": "pnpm -r --filter ./packages/* run test",
-    "typecheck": "pnpm -r --filter ./packages/* run typecheck",
-    "clean": "pnpm -r --filter ./packages/* run clean"
+    "build": "pnpm -r --filter @novelpad/core --filter @novelpad/theme --filter @novelpad/schema --filter @novelpad/cli --filter novelpad run build",
+    "test": "pnpm -r --filter @novelpad/core --filter @novelpad/cli --filter novelpad run test",
+    "typecheck": "pnpm -r --filter @novelpad/core --filter @novelpad/cli --filter novelpad run typecheck",
+    "clean": "pnpm -r --filter @novelpad/core --filter @novelpad/cli --filter novelpad run clean"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
