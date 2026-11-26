@@ -47,6 +47,11 @@
           "id": "novelpad.entities",
           "name": "设定",
           "icon": "assets/lore.svg"
+        },
+        {
+          "id": "novelpad.graph",
+          "name": "图谱",
+          "icon": "assets/graph.svg"
         }
       ]
     },
@@ -54,6 +59,10 @@
       {
         "view": "novelpad.chapters",
         "contents": "还没有打开作品。\n[新建作品](command:novelpad.initProject)\n[打开作品文件夹](command:vscode.openFolder)\n\n用 Markdown 写作：章节、角色、世界观都是文件。"
+      },
+      {
+        "view": "novelpad.graph",
+        "contents": "图谱会从角色卡的 relations、章节的 characters / locations 和伏笔声明自动生成。\n[打开关系云图](command:novelpad.graph.open)\n[打开剧情发展链](command:novelpad.graph.chain)"
       }
     ],
     "commands": [
@@ -173,6 +182,15 @@
       {
         "command": "novelpad._test.continueAtCursor",
         "title": "NovelPad: (internal) continue at cursor"
+      },
+      {
+        "command": "novelpad.graph.open",
+        "title": "NovelPad: 打开关系云图",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "novelpad.graph.chain",
+        "title": "NovelPad: 打开剧情发展链"
       }
     ],
     "menus": {
@@ -201,6 +219,21 @@
           "command": "novelpad.exportDocx",
           "when": "view == novelpad.chapters",
           "group": "1_export@2"
+        },
+        {
+          "command": "novelpad.graph.open",
+          "when": "view == novelpad.chapters || view == novelpad.entities",
+          "group": "navigation@3"
+        },
+        {
+          "command": "novelpad.graph.open",
+          "when": "view == novelpad.graph",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelpad.graph.chain",
+          "when": "view == novelpad.graph",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -268,7 +301,14 @@
         },
         "novelpad.copilot.provider": {
           "type": "string",
-          "enum": ["custom", "deepseek", "zhipu", "dashscope", "ollama", "openai"],
+          "enum": [
+            "custom",
+            "deepseek",
+            "zhipu",
+            "dashscope",
+            "ollama",
+            "openai"
+          ],
           "enumDescriptions": [
             "自定义 / 本地反代（默认 127.0.0.1:8788/v1）",
             "DeepSeek 官方",
@@ -347,7 +387,10 @@
         },
         "novelpad.decision.model": {
           "type": "string",
-          "enum": ["decision-model", "decision-model-preview"],
+          "enum": [
+            "decision-model",
+            "decision-model-preview"
+          ],
           "default": "decision-model",
           "description": "决策模型。"
         }

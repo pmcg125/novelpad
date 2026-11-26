@@ -164,6 +164,15 @@ module.exports.run = async function () {
       log(true, "决策模型连接测试已执行");
     }
   });
+
+  // 7. 图谱
+  await step("图谱", async () => {
+    await vscode.commands.executeCommand("novelpad.graph.open");
+    await new Promise(r => setTimeout(r, 2500));
+    const t = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(x => x.label).find(l => l.includes("图谱"));
+    log(!!t, "图谱面板已打开: " + t);
+    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+  });
 };
 `;
 

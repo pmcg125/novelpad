@@ -10,6 +10,7 @@ import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
+import { openGraph, refreshGraph } from "./views/graph";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -31,6 +32,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // RAG + 决策模型（注入 Copilot）
   registerRagAndDecision(context, store, copilot.continuation);
+
+  // 图谱
+  context.subscriptions.push(
+    vscode.commands.registerCommand("novelpad.graph.open", () => openGraph(store, "net")),
+    vscode.commands.registerCommand("novelpad.graph.chain", () => openGraph(store, "chain")),
+  );
+  store.onDidChange(() => refreshGraph());
 
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
