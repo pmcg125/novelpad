@@ -71,6 +71,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    env:
+      # 上游 1.85 用 yarn 1；它会向上找到本仓库根的 packageManager: pnpm 并拒绝执行
+      SKIP_YARN_COREPACK_CHECK: "1"
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}

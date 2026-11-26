@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,25 +24,43 @@ jobs:
         working-directory: packages/extension
         run: npx @vscode/vsce package --no-dependencies --allow-missing-repository -o ../../novelpad.vsix
 
-      # 壳产物由 Shell Build（tag 触发）产出；这里等待并下载
+      # 壳产物由 Shell Build（tag 触发）产出；这里等同一个 commit 的构建
       - name: 等待壳构建完成
-        run: |
-          for i in $(seq 1 60); do
-            status=$(gh run list --workflow "Shell Build" --limit 1 --json status -q '.[0].status' || echo "")
-            [ "$status" = "completed" ] && break
-            sleep 60
-          done
-
-      - name: 下载壳产物
-        continue-on-error: true
-        run: |
-          run=$(gh run list --workflow "Shell Build" --limit 1 --json databaseId -q '.[0].databaseId')
-          for name in NovelPad-windows NovelPad-linux NovelPad-macos; do
-            gh run download $run -n $name -D dist/ || true
-          done
-          ls -la dist/ || true
+        id: shell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run=""
+          for i in $(seq 1 120); do
+            info=$(gh run list --workflow "Shell Build" --branch "$GITHUB_REF_NAME" --limit 1 --json databaseId,status,conclusion)
+            status=$(echo "$info" | jq -r '.[0].status // ""')
+            if [ "$status" = "completed" ]; then
+              run=$(echo "$info" | jq -r '.[0].databaseId')
+              conclusion=$(echo "$info" | jq -r '.[0].conclusion // ""')
+              if [ "$conclusion" != "success" ]; then
+                echo "壳构建失败（$conclusion），run $run"
+                exit 1
+              fi
+              break
+            fi
+            echo "第 $i 次：$status"
+            sleep 60
+          done
+          if [ -z "$run" ]; then
+            echo "等待超时，未找到成功的壳构建"
+            exit 1
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - name: 下载壳产物
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run="${{ steps.shell.outputs.run }}"
+          for name in NovelPad-windows NovelPad-linux NovelPad-macos; do
+            gh run download "$run" -n "$name" -D dist/ || true
+          done
+          ls -la dist/ || true
 
       - name: 上游版本
         id: up
