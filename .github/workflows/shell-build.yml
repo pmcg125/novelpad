@@ -138,16 +138,13 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         run: |
-          npm i -g node-gyp
+          npm i -g node-gyp@10
           ${{ steps.pm.outputs.install }}
 
       - name: 构建（gulp ${{ matrix.gulp }}）
         working-directory: upstream
         shell: bash
         run: npx gulp ${{ matrix.gulp }}
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: 定位产物目录
         id: out
