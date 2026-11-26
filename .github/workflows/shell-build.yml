@@ -35,12 +35,12 @@ jobs:
           PLATFORM: ${{ inputs.platform }}
         run: |
           ALL='[
-            {"name":"windows","os":"windows-latest","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},
+            {"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},
             {"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"},
             {"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}
           ]'
           case "$PLATFORM" in
-            win32|windows) SEL='[{"name":"windows","os":"windows-latest","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]' ;;
+            win32|windows) SEL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]' ;;
             linux)         SEL='[{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"}]' ;;
             darwin|macos)  SEL='[{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]' ;;
             *)             SEL="$ALL" ;;
