@@ -126,7 +126,7 @@ module.exports.run = async function () {
 
   await step(skipIf(!LLM_TEST)("Copilot 真实续写（扩展链路 → 127.0.0.1:8788，需 NOVLEPAD_LLM_TEST=1）"), async () => {
     // 通过扩展的内部测试钩子直接写 key，避免弹窗
-    await vscode.commands.executeCommand("novelpad._test.setApiKey", "11223344");
+    await vscode.commands.executeCommand("novelpad._test.setApiKey", process.env.NOVLEPAD_LLM_KEY ?? "");
     const before = doc.getText().length;
     const cursor = doc.positionAt(before);
     editor.selection = new vscode.Selection(cursor, cursor);
@@ -147,7 +147,7 @@ module.exports.run = async function () {
   // 6. RAG + 决策（需要 DashScope key）
   await step(skipIf(!LLM_TEST)("RAG 建索引（DashScope embedding）"), async () => {
     const c = vscode.workspace.getConfiguration();
-    await c.update("novelpad.rag.apiKey", "DASHSCOPE_KEY_REDACTED", vscode.ConfigurationTarget.Global);
+    await c.update("novelpad.rag.apiKey", process.env.DASHSCOPE_API_KEY ?? "", vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand("novelpad.rag.rebuild");
     await new Promise(r => setTimeout(r, 8000));
     let ok = false;

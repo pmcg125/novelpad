@@ -116,7 +116,7 @@ describe("collectChunks", () => {
 describe.skipIf(process.env.NOVLEPAD_EMBED_TEST !== "1")("真实 qwen3.7-text-embedding-flash（需 NOVLEPAD_EMBED_TEST=1）", () => {
   const embedder = new OpenAICompatibleEmbedding({
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    apiKey: process.env.DASHSCOPE_API_KEY ?? "DASHSCOPE_KEY_REDACTED",
+    apiKey: process.env.DASHSCOPE_API_KEY ?? "",
     model: "qwen3.7-text-embedding-flash",
   });
 
@@ -147,7 +147,7 @@ describe.skipIf(process.env.NOVLEPAD_EMBED_TEST !== "1")("真实 qwen3.7-text-em
 
     // rerank 精排
     const { DashScopeReranker } = await import("./rerank.js");
-    const reranker = new DashScopeReranker({ workspaceId: process.env.DASHSCOPE_WORKSPACE ?? "WORKSPACE_REDACTED", apiKey: process.env.DASHSCOPE_API_KEY ?? "DASHSCOPE_KEY_REDACTED" });
+    const reranker = new DashScopeReranker({ workspaceId: process.env.DASHSCOPE_WORKSPACE ?? "", apiKey: process.env.DASHSCOPE_API_KEY ?? "" });
     const hits2r = await idx.search("冬至说话为什么慢半拍", { topK: 3, reranker, recallK: 15 });
     console.log("\n--- 冬至口吃（向量召回 15 → rerank 取 3）---");
     for (const h of hits2r) console.log(`  ${h.score.toFixed(3)} (vec ${(h.vectorScore ?? 0).toFixed(3)})  ${(h.chunk.meta as { entity?: string }).entity ?? ""} ${(h.chunk.meta as { section?: string }).section ?? ""}\n      ${h.chunk.text.slice(0, 80).replace(/\n/g, " ")}…`);

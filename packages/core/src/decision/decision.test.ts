@@ -114,8 +114,8 @@ describe("classifyIngest", () => {
 /* ============================================================
  * 真实决策模型
  * ============================================================ */
-const DASHSCOPE_KEY = process.env.DASHSCOPE_API_KEY ?? "DASHSCOPE_KEY_REDACTED";
-const WORKSPACE = process.env.DASHSCOPE_WORKSPACE ?? "WORKSPACE_REDACTED";
+const DASHSCOPE_KEY = process.env.DASHSCOPE_API_KEY ?? "";
+const WORKSPACE = process.env.DASHSCOPE_WORKSPACE ?? "";
 
 describe.skipIf(process.env.NOVLEPAD_DECISION_TEST !== "1")("真实 decision-model（需 NOVLEPAD_DECISION_TEST=1）", () => {
   const decider = new DecisionProvider({ workspaceId: WORKSPACE, apiKey: DASHSCOPE_KEY });

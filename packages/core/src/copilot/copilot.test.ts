@@ -174,7 +174,7 @@ describe("copilot 端到端（MockProvider）", () => {
 });
 
 describe.skipIf(process.env.NOVLEPAD_LLM_TEST !== "1")("真实反代（127.0.0.1:8788）— 需 NOVLEPAD_LLM_TEST=1", () => {
-  const cfg = { baseUrl: process.env.NOVLEPAD_LLM_URL ?? "http://127.0.0.1:8788/v1", apiKey: process.env.NOVLEPAD_LLM_KEY ?? "11223344", model: process.env.NOVLEPAD_LLM_MODEL ?? "deepseek-v4.1-flash" };
+  const cfg = { baseUrl: process.env.NOVLEPAD_LLM_URL ?? "", apiKey: process.env.NOVLEPAD_LLM_KEY ?? "", model: process.env.NOVLEPAD_LLM_MODEL ?? "" };
 
   it("complete 返回非空文本（简单问题模型可能跳过思考）", async () => {
     const { OpenAICompatibleProvider } = await import("../llm/provider.js");
