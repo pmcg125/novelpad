@@ -62,10 +62,8 @@ jobs:
           git checkout -b "upstream/$NEW_TAG"
           git commit -am "chore(shell): 上游 → $NEW_TAG（补丁重放无冲突，upstream-track 自动创建）"
           git push origin HEAD
-          gh pr create --title "上游更新：$NEW_TAG" --body "自动创建：补丁在 **$NEW_TAG** 上重放成功。
-
-1. 检查 Shell Build 是否通过
-2. 合并后发版" --base main
+          printf '%s\n\n%s\n%s\n' "自动创建：补丁在 **$NEW_TAG** 上重放成功。" "1. 检查 Shell Build 是否通过" "2. 合并后发版" > /tmp/pr-body.md
+          gh pr create --title "上游更新：$NEW_TAG" --body-file /tmp/pr-body.md --base main
 
       - name: 失败 → 开 Issue
         if: steps.apply.outcome == 'failure'
