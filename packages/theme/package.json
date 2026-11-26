@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "echo skip"
+    "typecheck": "echo skip",
+    "test": "echo \"theme: no tests\""
   }
 }

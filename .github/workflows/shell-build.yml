@@ -6,14 +6,13 @@ name: Shell Build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths: ["shell/**", "packages/extension/**", "packages/core/**", ".github/workflows/shell-build.yml"]
   workflow_dispatch:
     inputs:
       platform:
         description: "构建平台（all / win32 / linux / darwin）"
         default: "all"
-  push_tags:
-    tags: ["v*"]
 
 jobs:
   build-extension:

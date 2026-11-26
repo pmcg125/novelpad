@@ -52,36 +52,40 @@ jobs:
 
       - name: 成功 → 开 PR
         if: steps.apply.outcome == 'success' && steps.latest.outputs.tag != steps.cur.outputs.tag
-        run: |
-          echo "${{ steps.latest.outputs.tag }}" > shell/UPSTREAM
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b upstream/${{ steps.latest.outputs.tag }}
-          git commit -am "chore(shell): 上游 → ${{ steps.latest.outputs.tag }}
-
-补丁在新版上重放无冲突，由 upstream-track 自动创建。合并后将触发壳构建。"
-          git push origin HEAD
-          gh pr create --title "上游更新：${{ steps.latest.outputs.tag }}" --body "$(cat <<'EOF'
-自动创建：补丁在 **${{ steps.latest.outputs.tag }}** 上重放成功。
-
-- [ ] 检查 shell-build 是否通过
-- [ ] 合并后发版
-EOF
-)" --base main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          echo "$NEW_TAG" > shell/UPSTREAM
+          git config user.name "github-actions-bot"
+          git config user.email "actions@github.com"
+          git checkout -b "upstream/$NEW_TAG"
+          git commit -am "chore(shell): 上游 → $NEW_TAG（补丁重放无冲突，upstream-track 自动创建）"
+          git push origin HEAD
+          gh pr create --title "上游更新：$NEW_TAG" --body "自动创建：补丁在 **$NEW_TAG** 上重放成功。
+
+1. 检查 Shell Build 是否通过
+2. 合并后发版" --base main
 
       - name: 失败 → 开 Issue
         if: steps.apply.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const body = fs.readFileSync(process.env.APPLY_LOG ?? '/dev/null', 'utf8').slice(-3000);
+            const tag = "${{ steps.latest.outputs.tag }}";
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `上游 ${{ steps.latest.outputs.tag }}：补丁冲突，需人工合并`,
-              labels: ['shell', 'upstream'],
-              body: `补丁在 \`${{ steps.latest.outputs.tag }}\` 上重放失败。\n\n请在本地：\n\`\`\`\ngh repo clone microsoft/vscode upstream -- --depth 1 --branch ${{ steps.latest.outputs.tag }}\nnode shell/scripts/apply.mjs upstream   # 看哪个 .patch 冲突\n\`\`\`\n重新生成该补丁后推送。\n\n<details><summary>冲突日志</summary>\n\n\`\`\`\n${body}\n\`\`\`\n</details>`
+              title: `上游 ${tag}：补丁冲突，需人工合并`,
+              labels: ['upstream'],
+              body: [
+                `补丁在 \`${tag}\` 上重放失败。`,
+                '',
+                '请在本地：',
+                '```',
+                `git clone --depth 1 --branch ${tag} https://github.com/microsoft/vscode upstream`,
+                'node shell/scripts/apply.mjs upstream   # 看哪个 .patch 冲突',
+                '```',
+                '重新生成该补丁后推送。',
+              ].join('\n')
             });

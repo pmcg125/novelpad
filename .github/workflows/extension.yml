@@ -33,11 +33,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Build（先产出 core 的 d.ts，cli/extension 才能 typecheck）
+        run: pnpm build
+
       - name: Typecheck
         run: pnpm typecheck
-
-      - name: Build
-        run: pnpm build
 
       - name: Unit tests
         run: pnpm test
