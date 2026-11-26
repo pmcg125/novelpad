@@ -136,6 +136,12 @@ module.exports.run = async function () {
     log(added.length > 20, "续写插入了 " + added.length + " 字: " + added.slice(0, 40).replace(/\n/g, " ") + "…");
     await vscode.commands.executeCommand("undo");
     await editor.document.save();
+    // 思考过程面板
+    await vscode.commands.executeCommand("novelpad.copilot.showLastReasoning");
+    await new Promise(r => setTimeout(r, 500));
+    const reasonTitle = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => t.label).find(l => l.includes("思考过程"));
+    log(!!reasonTitle, "思考过程面板已打开: " + reasonTitle);
+    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
   });
 };
 `;

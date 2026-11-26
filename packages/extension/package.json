@@ -136,6 +136,11 @@
         "title": "NovelPad: Copilot 生成角色卡草稿"
       },
       {
+        "command": "novelpad.copilot.showLastReasoning",
+        "title": "NovelPad: Copilot 查看上次思考过程",
+        "icon": "$(lightbulb)"
+      },
+      {
         "command": "novelpad._test.setApiKey",
         "title": "NovelPad: (internal) set api key"
       },
@@ -229,6 +234,11 @@
           "type": "boolean",
           "default": true,
           "description": "启用 Novel Copilot（续写 / 润色 / 问答）。"
+        },
+        "novelpad.copilot.showReasoning": {
+          "type": "boolean",
+          "default": true,
+          "description": "推理模型的思考过程（以小说家口吻写的批注）：续写完成后状态栏可点击查看，改写与问答面板折叠显示。"
         },
         "novelpad.copilot.provider": {
           "type": "string",

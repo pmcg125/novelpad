@@ -6,6 +6,7 @@ import * as vscode from "vscode";
 import { assembleContext, continueStory } from "@novelpad/core";
 import type { ProjectStore } from "../store";
 import { CopilotConfig } from "./config";
+import { reasoningStatusBar, type ReasoningEntry } from "./reasoning";
 
 /** 把文档文本按光标切分，得到 frontmatter 之后的正文偏移 */
 function splitAtCursor(doc: vscode.TextDocument, cursor: vscode.Position): { before: string; offset: number } {
@@ -17,8 +18,18 @@ function splitAtCursor(doc: vscode.TextDocument, cursor: vscode.Position): { bef
   return { before: full.slice(Math.min(bodyStart, off), off), offset: off };
 }
 
+/** 最近一次思考过程，供「查看思考过程」命令使用 */
+let lastReasoning: ReasoningEntry | undefined;
+export function setLastReasoning(e: ReasoningEntry): void {
+  lastReasoning = e;
+}
+export function getLastReasoning(): ReasoningEntry | undefined {
+  return lastReasoning;
+}
+
 export class ContinuationFeature {
   private status: vscode.StatusBarItem;
+  private reasoningItem: vscode.Disposable | undefined;
   private running = false;
 
   constructor(
@@ -62,11 +73,10 @@ export class ContinuationFeature {
 
     this.running = true;
     this.status.show();
-    const t0 = Date.now();
     try {
       const { provider } = await this.config.provider("continue");
-      const text = await continueStory(provider, { ctx, hint });
-      const clean = text.trim();
+      const out = await continueStory(provider, { ctx, hint });
+      const clean = out.result.trim();
       if (!clean) {
         void vscode.window.showInformationMessage("Novel Copilot 没有返回内容，再试一次？");
         return;
@@ -75,8 +85,7 @@ export class ContinuationFeature {
       await editor.edit(
         (eb) => {
           const insertAt = editor.selection.active;
-          const prefix = needsSpaceBefore(editor, insertAt) ? "" : "";
-          eb.insert(insertAt, prefix + clean);
+          eb.insert(insertAt, clean);
         },
         { undoStopBefore: true, undoStopAfter: true },
       );
@@ -84,7 +93,18 @@ export class ContinuationFeature {
       const start = cursor.with(undefined, cursor.character);
       const end = editor.document.positionAt(editor.document.offsetAt(start) + clean.length);
       editor.selection = new vscode.Selection(start, end);
-      void vscode.window.setStatusBarMessage(`Novel Copilot · ${clean.length} 字 · ${((Date.now() - t0) / 1000).toFixed(1)}s（Ctrl+Z 撤销）`, 4000);
+
+      // 思考过程
+      const entry: ReasoningEntry = { kind: "续写", reasoning: out.reasoning, output: clean, elapsedMs: out.elapsedMs };
+      setLastReasoning(entry);
+      if (this.config.read().showReasoning) {
+        this.reasoningItem?.dispose();
+        this.reasoningItem = reasoningStatusBar(entry);
+      }
+      void vscode.window.setStatusBarMessage(
+        `Novel Copilot · ${clean.length} 字 · ${(out.elapsedMs / 1000).toFixed(1)}s${out.reasoning ? " · 点右侧灯泡看批注" : ""}（Ctrl+Z 撤销）`,
+        5000,
+      );
     } catch (e) {
       const msg = (e as Error).message ?? String(e);
       if (/API Key|401|403/.test(msg)) void CopilotPrompt.missingKey(this.config);
@@ -97,11 +117,8 @@ export class ContinuationFeature {
 
   dispose(): void {
     this.status.dispose();
+    this.reasoningItem?.dispose();
   }
-}
-
-function needsSpaceBefore(editor: vscode.TextEditor, pos: vscode.Position): boolean {
-  return pos.character > 0 && !/\s/.test(editor.document.lineAt(pos.line).text[pos.character - 1] ?? "");
 }
 
 /** 导出便于复用的提示 */

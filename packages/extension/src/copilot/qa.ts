@@ -6,7 +6,7 @@ import { marked } from "marked";
 import { askQuestion, collectForeshadows, type Chapter } from "@novelpad/core";
 import type { ProjectStore } from "../store";
 import type { CopilotConfig } from "./config";
-import { CopilotPrompt } from "./continue";
+import { CopilotPrompt, setLastReasoning } from "./continue";
 
 /** 从作品里检索与问题相关的事实 */
 export function collectFacts(project: NonNullable<ProjectStore["project"]>, question: string, max = 12): string[] {
@@ -130,13 +130,14 @@ export class QaFeature {
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Novel Copilot 查阅设定中…" }, async () => {
       try {
         const { provider } = await this.config.provider("edit");
-        const answer = await askQuestion(provider, q, { title: project.config.title, chapterOrder, facts });
-        const answerHtml = marked.parse(answer, { async: false }) as string;
+        const out = await askQuestion(provider, q, { title: project.config.title, chapterOrder, facts });
+        setLastReasoning({ kind: "问答", reasoning: out.reasoning, output: out.result, elapsedMs: out.elapsedMs });
+        const answerHtml = marked.parse(out.result, { async: false }) as string;
         const factsHtml = facts.length
           ? `<details><summary>查看依据（${facts.length} 条）</summary><ul>${facts.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul></details>`
           : "";
         const panel = vscode.window.createWebviewPanel("novelpad.qa", `Novel Copilot · ${q.slice(0, 20)}`, vscode.ViewColumn.Beside, { enableScripts: false });
-        panel.webview.html = webviewHtml(q, answerHtml, factsHtml, chapterOrder);
+        panel.webview.html = webviewHtml(q, answerHtml, factsHtml, chapterOrder, out.reasoning);
       } catch (e) {
         const msg = (e as Error).message ?? String(e);
         if (/API Key|401|403/.test(msg)) void CopilotPrompt.missingKey(this.config);
@@ -147,7 +148,7 @@ export class QaFeature {
 }
 
 /** 问答页面（使用 VS Code 主题变量，自动适配宣纸 / 夜墨） */
-function webviewHtml(q: string, answerHtml: string, factsHtml: string, chapterOrder?: number): string {
+function webviewHtml(q: string, answerHtml: string, factsHtml: string, chapterOrder?: number, reasoning?: string): string {
   const style = `
     body { font-family: var(--vscode-font-family); padding: 16px 20px; color: var(--vscode-foreground); line-height: 1.8; font-size: 14px; }
     .q { color: var(--vscode-descriptionForeground); margin-bottom: 12px; }
@@ -158,10 +159,16 @@ function webviewHtml(q: string, answerHtml: string, factsHtml: string, chapterOr
     ul { font-size: 12px; color: var(--vscode-descriptionForeground); padding-left: 18px; }
     li { margin: 2px 0; }
     code { background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; }
+    .reasoning { white-space: pre-wrap; font-family: "LXGW WenKai", "Kaiti SC", "KaiTi", var(--vscode-font-family); font-size: 13.5px; color: var(--vscode-foreground); opacity: .9; margin-top: 6px; }
+    .reasoning::before { content: "✎ 批注"; display: block; font-family: var(--vscode-font-family); font-size: 11px; color: var(--vscode-descriptionForeground); letter-spacing: .06em; margin-bottom: 4px; }
   `;
+  const reasoningHtml = reasoning
+    ? `<details><summary>查看思考过程</summary><div class="reasoning">${escapeHtml(reasoning.trim())}</div></details>`
+    : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${style}</style></head><body>
     <div class="q">你问：<b>${escapeHtml(q)}</b>${chapterOrder ? ` <small>（第 ${chapterOrder} 章）</small>` : ""}</div>
     <div class="a">${answerHtml}</div>
+    ${reasoningHtml}
     ${factsHtml}
   </body></html>`;
 }

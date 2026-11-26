@@ -24,6 +24,15 @@ const ANTI_AI_STYLE = `避免「AI 腔」：
 - 不要堆砌形容词，动作和细节优先于形容
 - 对话要像人说话，不要书面腔`;
 
+/**
+ * 思考方式指令：让推理模型用「小说家的思维」而不是「任务执行者的思维」推理。
+ * 放在 system prompt 最前面（模型对开头的指令遵循度最高），并用身份框架代替规则清单。
+ */
+const THINKING_STYLE = `你的推理过程（思考）比正文更重要，请这样思考：
+你是一位正在写这本书的小说家，现在坐在书桌前，手里是第 {order} 章的草稿。你的思考就是你写在草稿纸边角的批注——用中文，用小说家的口气，像「她刚才那句话说得太硬了，得让她的手先动一下」「这里不能让沈默先开口，读者会等着看他怎么接」这样。批注是短的、零碎的、想法层面的，几十到两百字就够——不要在思考里把正文预写一遍，正文留给正文。
+思考时不要出现「用户」「需求」「要求」「字数」「输出」「任务」「AI」「避免」这类词，也不要复述任何规则——你不是在执行要求，你是在写小说。规则你已经内化了：人物按设定走，伏笔该埋就埋，句子用动作和细节不用形容词。
+批注的顺序：先进入场景（谁在、什么光、刚才发生了什么），再推人物（他此刻想要什么、怕什么、会怎么做），再定这段要推进到哪里停。`;
+
 function renderCharacter(c: CharacterContext): string {
   const lines = [`- ${c.name}${c.aliases?.length ? `（又称${c.aliases.join("、")}）` : ""}`];
   if (c.role) lines.push(`  定位：${roleLabel(c.role)}`);
@@ -51,7 +60,9 @@ function roleLabel(r: string): string {
 
 export function buildSystemPrompt(ctx: AssembledContext): string {
   const parts: string[] = [];
-  parts.push(`你是小说《${ctx.title}》的合作者，正在和作者一起写第 ${ctx.chapter.order} 章「${ctx.chapter.title}」。`);
+  parts.push(THINKING_STYLE.replace("{order}", String(ctx.chapter.order)));
+  parts.push("");
+  parts.push(`你是小说《${ctx.title}》的作者之一，正在和另一位作者合作写第 ${ctx.chapter.order} 章「${ctx.chapter.title}」。`);
   if (ctx.chapter.volume) parts.push(`所属卷：${ctx.chapter.volume}。`);
   parts.push("");
   if (ctx.characters.length) {
@@ -69,7 +80,7 @@ export function buildSystemPrompt(ctx: AssembledContext): string {
   if (ctx.constraints.length) parts.push(`约束：\n${ctx.constraints.map((c) => `- ${c}`).join("\n")}`);
   parts.push("");
   parts.push(ANTI_AI_STYLE);
-  parts.push("输出使用简体中文，正文用 Markdown 段落，不要加标题。");
+  parts.push("正文用简体中文，Markdown 段落，不加标题。");
   return parts.join("\n");
 }
 
@@ -89,10 +100,10 @@ export function buildContinuationMessages(req: ContinuationRequest): ChatMessage
   const { ctx } = req;
   const user: string[] = [];
   if (ctx.prevChapterTail) user.push(`【上一章结尾】\n${ctx.prevChapterTail}\n`);
-  if (ctx.styleSamples.length) user.push(`【文风参考（作者自己的文字）】\n${ctx.styleSamples.join("\n……\n")}\n`);
-  user.push(`【当前章节光标前的内容】\n${ctx.recentText}\n`);
-  user.push("请紧接上文继续写一段（120~200 字），只输出续写的正文，不要重复已有内容，不要解释。");
-  if (req.hint) user.push(`作者要求：${req.hint}`);
+  if (ctx.styleSamples.length) user.push(`【你之前写的文字（保持这个手感）】\n${ctx.styleSamples.join("\n……\n")}\n`);
+  user.push(`【当前章草稿（写到这里停笔）】\n${ctx.recentText}\n`);
+  user.push("从这里接着往下写一小段（两三百字），到一个可以停笔的地方收。不要重复已有内容，不要解释，只给正文。");
+  if (req.hint) user.push(`另一位作者的批注：${req.hint}`);
   return [
     { role: "system", content: buildSystemPrompt(ctx) },
     { role: "user", content: user.join("\n") },
@@ -200,36 +211,52 @@ export function buildQuestionMessages(q: string, ctx: QuestionContext): ChatMess
  * 便捷调用
  * ============================================================ */
 
-export async function continueStory(provider: LLMProvider, req: ContinuationRequest): Promise<string> {
+export interface CopilotOutput<T> {
+  result: T;
+  /** 推理模型的思考过程 */
+  reasoning?: string;
+  /** 耗时（毫秒） */
+  elapsedMs: number;
+}
+
+export async function continueStory(provider: LLMProvider, req: ContinuationRequest): Promise<CopilotOutput<string>> {
   const messages = buildContinuationMessages(req);
   // 推理模型会先消耗 token 思考，maxTokens 要给足余量
-  const base: CompleteRequest = { messages, maxTokens: req.maxTokens ?? 1500, temperature: 0.85, frequencyPenalty: 0.3 };
+  const base: CompleteRequest = { messages, maxTokens: req.maxTokens ?? 2500, temperature: 0.85, frequencyPenalty: 0.3 };
+  const t0 = Date.now();
   const r = await provider.complete(base);
-  return cleanContinuation(r.text, req.ctx.recentText);
+  return { result: cleanContinuation(r.text, req.ctx.recentText), reasoning: r.reasoning, elapsedMs: Date.now() - t0 };
 }
 
-export async function editText(provider: LLMProvider, action: CopilotAction, selection: string, ctx: AssembledContext, povName?: string): Promise<EditResult> {
+export async function editText(provider: LLMProvider, action: CopilotAction, selection: string, ctx: AssembledContext, povName?: string): Promise<CopilotOutput<EditResult>> {
+  const t0 = Date.now();
   const r = await provider.complete({ messages: buildEditMessages(action, selection, ctx, povName), maxTokens: 2500, temperature: 0.5 });
-  return parseEditResult(r.text);
+  return { result: parseEditResult(r.text), reasoning: r.reasoning, elapsedMs: Date.now() - t0 };
 }
 
-export async function askQuestion(provider: LLMProvider, q: string, ctx: QuestionContext): Promise<string> {
+export async function askQuestion(provider: LLMProvider, q: string, ctx: QuestionContext): Promise<CopilotOutput<string>> {
+  const t0 = Date.now();
   const r = await provider.complete({ messages: buildQuestionMessages(q, ctx), maxTokens: 2000, temperature: 0.3 });
-  return r.text.trim();
+  return { result: r.text.trim(), reasoning: r.reasoning, elapsedMs: Date.now() - t0 };
 }
 
 /** 生成角色卡草稿（从正文推断） */
-export async function draftCharacterCard(provider: LLMProvider, name: string, evidence: string[], title: string): Promise<string> {
+export async function draftCharacterCard(provider: LLMProvider, name: string, evidence: string[], title: string): Promise<CopilotOutput<string>> {
+  const t0 = Date.now();
   const r = await provider.complete({
     messages: [
       {
         role: "system",
-        content: `你是小说《${title}》的设定编辑。根据正文片段为角色「${name}」生成一张 YAML 角色卡草稿。只输出 YAML，字段：name, aliases[], role(protagonist|antagonist|supporting|minor), tags[], summary, attrs{}, relations[]。无法从证据确定的字段留空，不要编造。`,
+        content: `你是小说《${title}》的设定编辑。根据正文片段为角色「${name}」生成一张 YAML 角色卡草稿。只输出 YAML，字段：name, aliases[], role(protagonist|antagonist|supporting|minor), tags[], summary, attrs{}, relations[]。无法从证据确定的字段留空，不要编造。思考时用中文，像编辑整理人物档案一样逐条核对证据。`,
       },
       { role: "user", content: evidence.map((e, i) => `片段${i + 1}：${e}`).join("\n\n") },
     ],
     maxTokens: 2000,
     temperature: 0.3,
   });
-  return r.text.replace(/^```(?:yaml)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return {
+    result: r.text.replace(/^```(?:yaml)?\s*/i, "").replace(/\s*```$/, "").trim(),
+    reasoning: r.reasoning,
+    elapsedMs: Date.now() - t0,
+  };
 }

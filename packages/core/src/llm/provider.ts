@@ -21,6 +21,8 @@ export interface CompleteRequest {
 
 export interface CompleteResult {
   text: string;
+  /** 推理模型的思考过程（无则为空） */
+  reasoning?: string;
   usage?: { promptTokens: number; completionTokens: number };
   finishReason?: string;
 }
@@ -87,21 +89,54 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 
   async complete(req: CompleteRequest): Promise<CompleteResult> {
-    const { url, init } = this.build(req, false);
+    // 统一走流式：推理模型的 reasoning_content 只在流式 delta 里出现
+    const { url, init } = this.build(req, true);
     const res = await this.fetchWithTimeout(url, init, req.timeoutMs);
-    if (!res.ok) throw new LLMError(`LLM 请求失败 ${res.status}`, res.status, await res.text());
-    const json = (await res.json()) as {
-      choices?: { message?: { content?: string }; finish_reason?: string }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const choice = json.choices?.[0];
-    return {
-      text: choice?.message?.content ?? "",
-      usage: json.usage
-        ? { promptTokens: json.usage.prompt_tokens ?? 0, completionTokens: json.usage.completion_tokens ?? 0 }
-        : undefined,
-      finishReason: choice?.finish_reason,
-    };
+    if (!res.ok || !res.body) throw new LLMError(`LLM 请求失败 ${res.status}`, res.status, await res.text());
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let text = "";
+    let reasoning = "";
+    let finish: string | undefined;
+    let usage: CompleteResult["usage"];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s.startsWith("data:")) continue;
+        const data = s.slice(5).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const j = JSON.parse(data) as {
+            choices?: { delta?: { content?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }[];
+            usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+          };
+          const c = j.choices?.[0];
+          if (c?.delta?.reasoning_content) reasoning += c.delta.reasoning_content;
+          if (c?.delta?.content) text += c.delta.content;
+          if (c?.finish_reason) finish = c.finish_reason;
+          if (j.usage) usage = { promptTokens: j.usage.prompt_tokens ?? 0, completionTokens: j.usage.completion_tokens ?? 0 };
+        } catch {
+          // 忽略无法解析的行
+        }
+      }
+    }
+    const result: CompleteResult = { text, reasoning: reasoning || undefined, usage, finishReason: finish };
+    if (!text && !reasoning) {
+      // 某些反代对 stream 请求返回非流式 JSON
+      try {
+        const j = JSON.parse(buf) as { choices?: { message?: { content?: string } }[] };
+        result.text = j.choices?.[0]?.message?.content ?? "";
+      } catch {
+        /* ignore */
+      }
+    }
+    return result;
   }
 
   /** 流式事件 */

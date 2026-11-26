@@ -5,9 +5,8 @@ import * as vscode from "vscode";
 import { ACTION_LABEL, assembleContext, editText, type AssembledContext, type CopilotAction } from "@novelpad/core";
 import type { ProjectStore } from "../store";
 import type { CopilotConfig } from "./config";
-import { CopilotPrompt } from "./continue";
-
-const seconds = (t0: number) => (Date.now() - t0) / 1000;
+import { CopilotPrompt, setLastReasoning } from "./continue";
+import { showReasoning, type ReasoningEntry } from "./reasoning";
 
 function emptyContext(doc: vscode.TextDocument): AssembledContext {
   return {
@@ -85,15 +84,19 @@ export class EditActions implements vscode.Disposable {
     this.running = true;
     this.status.text = `$(sparkle) ${ACTION_LABEL[action]}中…`;
     this.status.show();
-    const t0 = Date.now();
     try {
       const { provider } = await this.config.provider("edit");
-      const r = await editText(provider, action, original, ctx, povName);
+      const out = await editText(provider, action, original, ctx, povName);
+      const r = out.result;
       if (!r.rewritten.trim() || r.rewritten.trim() === original.trim()) {
         void vscode.window.showInformationMessage("Novel Copilot 认为这里不需要改动");
         return;
       }
-      const decision = await this.preview(doc.uri, r.rewritten, ACTION_LABEL[action], r.changes, original.length, seconds(t0));
+      // 思考过程
+      const entry: ReasoningEntry = { kind: "改写", reasoning: out.reasoning, output: r.rewritten, elapsedMs: out.elapsedMs };
+      setLastReasoning(entry);
+      if (this.config.read().showReasoning && out.reasoning) showReasoning(entry, { reveal: false });
+      const decision = await this.preview(doc.uri, r.rewritten, ACTION_LABEL[action], r.changes, original.length, out.elapsedMs);
       if (decision === true) {
         const edit = new vscode.WorkspaceEdit();
         edit.replace(doc.uri, range, r.rewritten);
@@ -112,12 +115,13 @@ export class EditActions implements vscode.Disposable {
   }
 
   /** 并排 diff 预览。true 应用 / false 重新生成 / undefined 放弃 */
-  private async preview(srcUri: vscode.Uri, rewritten: string, label: string, changes: string[], originalLen: number, sec: number): Promise<boolean | undefined> {
+  private async preview(srcUri: vscode.Uri, rewritten: string, label: string, changes: string[], originalLen: number, elapsedMs: number): Promise<boolean | undefined> {
+    // 预览文档顶部放批注（折叠），下方是改写结果
     const preview = await vscode.workspace.openTextDocument({ language: "markdown", content: rewritten });
     await vscode.commands.executeCommand("vscode.diff", srcUri, preview.uri, `${label} · Novel Copilot 预览`, { preview: true });
     const detail = changes.length ? `改动：${changes.slice(0, 3).join("；")}` : "";
     const pick = await vscode.window.showInformationMessage(
-      `Novel Copilot：${label}完成（${rewritten.length} 字，原 ${originalLen} 字，${sec.toFixed(1)}s）${detail}`,
+      `Novel Copilot：${label}完成（${rewritten.length} 字，原 ${originalLen} 字，${(elapsedMs / 1000).toFixed(1)}s）${detail}`,
       "应用",
       "重新生成",
       "放弃",

@@ -28,7 +28,7 @@ export class CopilotConfig {
   }
 
   /** 读取当前生效的连接参数 */
-  read(): { enabled: boolean; baseUrl: string; model: string; editModel: string; timeoutMs: number; hasKey: boolean } {
+  read(): { enabled: boolean; baseUrl: string; model: string; editModel: string; timeoutMs: number; hasKey: boolean; showReasoning: boolean } {
     const c = vscode.workspace.getConfiguration();
     const preset = c.get<string>(CFG.preset, "custom");
     const presetUrl = PROVIDER_PRESETS[preset]?.baseUrl;
@@ -39,6 +39,7 @@ export class CopilotConfig {
       editModel: c.get<string>(CFG.editModel, "") || c.get<string>(CFG.model, "deepseek-v4.1-flash"),
       timeoutMs: c.get<number>(CFG.timeoutMs, 90_000),
       hasKey: false,
+      showReasoning: c.get<boolean>("novelpad.copilot.showReasoning", true),
     };
   }
 
@@ -71,6 +72,11 @@ export const CONFIGURATION_PROPERTIES = {
     type: "boolean",
     default: true,
     description: "启用 Novel Copilot（续写 / 润色 / 问答）。",
+  },
+  "novelpad.copilot.showReasoning": {
+    type: "boolean",
+    default: true,
+    description: "推理模型的思考过程（以小说家口吻写的批注）：续写完成后状态栏可点击查看，改写预览顶部折叠显示。",
   },
   "novelpad.copilot.provider": {
     type: "string",

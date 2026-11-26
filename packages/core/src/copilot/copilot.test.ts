@@ -95,8 +95,11 @@ describe("assembleContext", () => {
 const ctx1 = assembleContext(project, { chapter: ch1 });
 
 describe("prompts", () => {
-  it("system 包含书名、角色卡、伏笔、约束", () => {
+  it("system 以小说家批注开头，含书名、角色卡、伏笔、约束", () => {
     const sys = buildSystemPrompt(ctx1);
+    expect(sys.startsWith("你的推理过程")).toBe(true);
+    expect(sys).toContain("正在写这本书的小说家");
+    expect(sys).toContain("第 1 章的草稿");
     expect(sys).toContain("《雨夜》");
     expect(sys).toContain("林晚");
     expect(sys).toContain("情绪克制=高");
@@ -105,11 +108,12 @@ describe("prompts", () => {
     expect(sys).toContain("AI 腔");
   });
 
-  it("续写消息包含前文与文风", () => {
+  it("续写消息用作者口吻，不含任务腔", () => {
     const msgs = buildContinuationMessages({ ctx: assembleContext(project, { chapter: ch3 }), hint: "让沈默进门" });
     expect(msgs[0]?.role).toBe("system");
-    expect(msgs[1]?.content).toContain("【文风参考");
-    expect(msgs[1]?.content).toContain("作者要求：让沈默进门");
+    expect(msgs[1]?.content).toContain("保持这个手感");
+    expect(msgs[1]?.content).toContain("另一位作者的批注：让沈默进门");
+    expect(msgs[1]?.content).not.toMatch(/用户|任务要求/);
   });
 
   it("五种编辑动作都有规则", () => {
@@ -141,23 +145,24 @@ describe("prompts", () => {
 });
 
 describe("copilot 端到端（MockProvider）", () => {
-  it("continueStory 走 system+user 并清理输出", async () => {
+  it("continueStory 走 system+user 并清理输出，返回 CopilotOutput", async () => {
     const p = new MockProvider(() => "```\n他推门进来。\n```");
     const out = await continueStory(p, { ctx: ctx1 });
-    expect(out).toBe("他推门进来。");
+    expect(out.result).toBe("他推门进来。");
+    expect(out.elapsedMs).toBeGreaterThanOrEqual(0);
     expect(p.calls[0]?.messages[0]?.role).toBe("system");
-    expect(p.calls[0]?.messages[1]?.content).toContain("当前章节光标前");
+    expect(p.calls[0]?.messages[1]?.content).toContain("当前章草稿");
   });
 
   it("editText 返回结构化结果", async () => {
     const p = new MockProvider(() => JSON.stringify({ rewritten: "改后", changes: ["删形容词"] }));
     const r = await editText(p, "polish", "改前", ctx1);
-    expect(r).toEqual({ rewritten: "改后", changes: ["删形容词"] });
+    expect(r.result).toEqual({ rewritten: "改后", changes: ["删形容词"] });
   });
 
   it("draftCharacterCard 去掉 yaml fence", async () => {
     const p = new MockProvider(() => "```yaml\nname: 周砚\n```");
-    expect(await draftCharacterCard(p, "周砚", ["片段"], "雨夜")).toBe("name: 周砚");
+    expect((await draftCharacterCard(p, "周砚", ["片段"], "雨夜")).result).toBe("name: 周砚");
   });
 
   it("stream 逐字产出", async () => {
@@ -171,11 +176,12 @@ describe("copilot 端到端（MockProvider）", () => {
 describe.skipIf(process.env.NOVLEPAD_LLM_TEST !== "1")("真实反代（127.0.0.1:8788）— 需 NOVLEPAD_LLM_TEST=1", () => {
   const cfg = { baseUrl: process.env.NOVLEPAD_LLM_URL ?? "http://127.0.0.1:8788/v1", apiKey: process.env.NOVLEPAD_LLM_KEY ?? "11223344", model: process.env.NOVLEPAD_LLM_MODEL ?? "deepseek-v4.1-flash" };
 
-  it("complete 返回非空文本", async () => {
+  it("complete 返回非空文本（简单问题模型可能跳过思考）", async () => {
     const { OpenAICompatibleProvider } = await import("../llm/provider.js");
     const p = new OpenAICompatibleProvider(cfg);
-    const r = await p.complete({ messages: [{ role: "user", content: "只回复两个字：收到" }], maxTokens: 20 });
+    const r = await p.complete({ messages: [{ role: "user", content: "只回复两个字：收到" }], maxTokens: 800 });
     expect(r.text.length).toBeGreaterThan(0);
+    expect(r.usage).toBeDefined();
   }, 30_000);
 
   it("stream 能产出内容（推理模型需要足够 token 走完思考）", async () => {
@@ -190,11 +196,17 @@ describe.skipIf(process.env.NOVLEPAD_LLM_TEST !== "1")("真实反代（127.0.0.1
     expect(got.length).toBeGreaterThan(0);
   }, 60_000);
 
-  it("续写真实章节得到合理输出", async () => {
+  it("续写真实章节得到合理输出，且捕获到中文推理过程", async () => {
     const { OpenAICompatibleProvider } = await import("../llm/provider.js");
     const p = new OpenAICompatibleProvider(cfg);
-    const out = await continueStory(p, { ctx: ctx1, maxTokens: 200 });
-    expect(out.length).toBeGreaterThan(20);
-    expect(out).not.toContain("```");
-  }, 60_000);
+    const out = await continueStory(p, { ctx: ctx1, maxTokens: 1200 });
+    expect(out.result.length).toBeGreaterThan(20);
+    expect(out.result).not.toContain("```");
+    // 推理模型：应有思考过程，且为中文（含 CJK）
+    expect(out.reasoning).toBeTruthy();
+    expect(/[\u4e00-\u9fff]/.test(out.reasoning ?? "")).toBe(true);
+    // 不应出现任务腔
+    expect(out.reasoning).not.toMatch(/用户需要|任务要求|输出一段/);
+    console.log("\n--- 推理过程（前 300 字）---\n" + (out.reasoning ?? "").slice(0, 300) + "\n--- 续写 ---\n" + out.result + "\n");
+  }, 90_000);
 });

@@ -4,9 +4,10 @@
 import * as vscode from "vscode";
 import { draftCharacterCard } from "@novelpad/core";
 import { CopilotConfig } from "./config";
-import { ContinuationFeature } from "./continue";
+import { ContinuationFeature, getLastReasoning } from "./continue";
 import { EditActions } from "./edit";
 import { QaFeature, collectFacts } from "./qa";
+import { showReasoning } from "./reasoning";
 import type { ProjectStore } from "../store";
 
 export function registerCopilot(context: vscode.ExtensionContext, store: ProjectStore): void {
@@ -36,6 +37,11 @@ export function registerCopilot(context: vscode.ExtensionContext, store: Project
       if (action) await edit.run(editor.document.uri, editor.selection, action);
     }),
     vscode.commands.registerCommand("novelpad.copilot.ask", () => qa.run()),
+    vscode.commands.registerCommand("novelpad.copilot.showLastReasoning", () => {
+      const last = getLastReasoning();
+      if (!last) return void vscode.window.showInformationMessage("还没有思考过程，先让 Copilot 续写或改写一段");
+      showReasoning(last);
+    }),
     vscode.commands.registerCommand("novelpad.copilot.setApiKey", () => CopilotConfig.promptApiKey(config.secrets)),
     // 内部测试钩子（不进命令面板）
     vscode.commands.registerCommand("novelpad._test.setApiKey", async (key: string) => config.setApiKey(key)),
@@ -110,7 +116,8 @@ async function draftCharacter(store: ProjectStore, config: CopilotConfig, name?:
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Novel Copilot 正在为「${n}」整理角色卡…` }, async () => {
     try {
       const { provider } = await config.provider("edit");
-      const yaml = await draftCharacterCard(provider, n, evidence, project.config.title);
+      const out = await draftCharacterCard(provider, n, evidence, project.config.title);
+      const yaml = out.result;
       const doc = await vscode.workspace.openTextDocument({ language: "yaml", content: yaml });
       await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
       const pick = await vscode.window.showInformationMessage(`已根据 ${evidence.length} 段正文生成「${n}」的角色卡草稿`, "保存到 characters/", "放弃");
