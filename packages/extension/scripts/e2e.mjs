@@ -21,8 +21,11 @@ const path = require("path");
 module.exports.run = async function () {
   const log = (ok, msg) => { console.log((ok ? "  [PASS] " : "  [FAIL] ") + msg); if (!ok) process.exitCode = 1; };
   const step = async (name, fn) => {
-    try { await fn(); } catch (e) { log(false, name + " — 异常: " + (e && e.message ? e.message.split("\n")[0] : String(e))); }
+    if (typeof name === "object" && name.skip) { console.log("  [SKIP] " + name.name); return; }
+    try { await fn(); } catch (e) { log(false, (name.name ?? name) + " — 异常: " + (e && e.message ? e.message.split("\n")[0] : String(e))); }
   };
+  const skipIf = (s) => (n) => (s ? { skip: true, name: n } : n);
+  const LLM_TEST = ${JSON.stringify(process.env.NOVLEPAD_LLM_TEST === "1")};
 
   // 1. 激活
   await step("激活", async () => {
@@ -121,7 +124,7 @@ module.exports.run = async function () {
     editor.selection = new vscode.Selection(start, start);
   });
 
-  await step("Copilot 真实续写（扩展链路 → 127.0.0.1:8788）", async () => {
+  await step(skipIf(!LLM_TEST)("Copilot 真实续写（扩展链路 → 127.0.0.1:8788，需 NOVLEPAD_LLM_TEST=1）"), async () => {
     // 通过扩展的内部测试钩子直接写 key，避免弹窗
     await vscode.commands.executeCommand("novelpad._test.setApiKey", "11223344");
     const before = doc.getText().length;
@@ -191,11 +194,10 @@ const r = spawnSync(process.execPath, [runnerFile], {
     return env;
   })(),
   timeout: 600_000,
-});
-const stdout = r.stdout ?? "";
+});const stdout = r.stdout ?? "";
 const stderr = r.stderr ?? "";
 // runTests 会把测试输出混在日志里，提取 ✓/✗ 行
-const lines = stdout.split(/\r?\n/).filter((l) => /\[(PASS|FAIL)\]/.test(l));
+const lines = stdout.split(/\r?\n/).filter((l) => /\[(PASS|FAIL|SKIP)\]/.test(l));
 console.log(lines.length ? lines.join("\n") : "(未捕获到测试输出)");
 if (r.status !== 0 || lines.some((l) => l.includes("[FAIL]"))) {
   console.error("\n---- 进程退出码:", r.status, "----");

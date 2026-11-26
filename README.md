@@ -44,8 +44,25 @@ cd packages/extension && pnpm package   # 生成 .vsix
 
 ```bash
 pnpm --filter novelpad run build
-node packages/extension/scripts/e2e.mjs
+node packages/extension/scripts/e2e.mjs                        # 使用本机 VS Code，跳过 LLM 调用
+NOVLEPAD_LLM_TEST=1 node packages/extension/scripts/e2e.mjs   # 含真实续写（需 127.0.0.1:8788 反代）
 ```
+
+core 的真实 LLM 测试同样受 `NOVLEPAD_LLM_TEST=1` 控制（`NOVLEPAD_LLM_URL / KEY / MODEL` 可覆盖）。
+
+## Novel Copilot
+
+| 操作 | 入口 |
+|---|---|
+| 续写（直接） | `Alt+\` |
+| 续写（带要求） | `Alt+Shift+\` |
+| 润色 / 扩写 / 缩写 / 换视角 / 口语化 | 选中文字 → 灯泡，或命令面板「Copilot 改写选中文字」 |
+| 问问设定 | 命令面板「Copilot 问问设定」——只依据设定库事实回答，可展开查看依据 |
+| 生成角色卡 | Problems 里「角色没有角色卡」→ 灯泡 → 根据正文生成 YAML 草稿 |
+| 配置 Key | 命令面板「Copilot 设置 API Key」（存 SecretStorage，不进 settings.json） |
+| 测试连接 | 命令面板「Copilot 测试连接」 |
+
+默认 provider 为 `custom`（`127.0.0.1:8788/v1`），模型 `deepseek-v4.1-flash`。可在设置 `novelpad.copilot.*` 中切换服务商预设 / baseUrl / 续写与改写模型。
 
 ## 仓库结构
 
@@ -66,7 +83,7 @@ shell/         VS Code 源码定制层（M6 启用）
 - [x] M0 基建：monorepo、章节模型、frontmatter 解析
 - [x] M1 导出：TXT / DOCX + Profile + CLI
 - [x] M2 设定库：树视图、lint 诊断、补全 / 悬浮 / 跳转、Schema、主题
-- [ ] M3 Novel Copilot
+- [x] M3 Novel Copilot：续写 / 改写 / 设定问答 / 角色卡草稿
 - [ ] M4 RAG
 - [ ] M5 图谱
 - [ ] M6 壳（源码定制）
