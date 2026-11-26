@@ -8,6 +8,7 @@ import { EntitiesProvider } from "./views/entities";
 import { Linter } from "./features/linter";
 import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
+import { registerCopilot } from "./copilot";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -23,6 +24,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ...registerLanguageFeatures(store),
     ...registerCommands(store, linter, chapters, entities),
   );
+
+  // Novel Copilot
+  registerCopilot(context, store);
 
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

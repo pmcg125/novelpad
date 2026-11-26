@@ -94,6 +94,46 @@ module.exports.run = async function () {
     await vscode.commands.executeCommand("undo");
     await doc.save();
   });
+
+  // 5. Copilot
+  await step("Copilot 命令", async () => {
+    const cmds = await vscode.commands.getCommands();
+    for (const id of ["novelpad.copilot.continue","novelpad.copilot.continueDirect","novelpad.copilot.editSelection","novelpad.copilot.ask","novelpad.copilot.setApiKey","novelpad.copilot.testConnection","novelpad.copilot.draftCharacter"]) {
+      log(cmds.includes(id), "Copilot 命令已注册: " + id);
+    }
+    const pkg = JSON.parse(require("fs").readFileSync(${JSON.stringify(path.join(extRoot, "package.json"))}, "utf8"));
+    const kb = pkg.contributes.keybindings.find(k => k.command === "novelpad.copilot.continueDirect");
+    log(kb && kb.key.length > 3 && kb.key.startsWith("alt+"), "手动续写快捷键已声明: " + (kb ? kb.key : "无"));
+    const cfg = vscode.workspace.getConfiguration("novelpad.copilot");
+    log(cfg.get("model") === "deepseek-v4.1-flash" && cfg.get("provider") === "custom", "默认配置: " + cfg.get("provider") + " / " + cfg.get("model"));
+  });
+
+  await step("Copilot CodeAction（选中文字出灯泡）", async () => {
+    const text = doc.getText();
+    const i = text.indexOf("雨是从傍晚开始下的");
+    const start = doc.positionAt(i);
+    const end = doc.positionAt(i + 30);
+    editor.selection = new vscode.Selection(start, end);
+    const actions = await vscode.commands.executeCommand("vscode.executeCodeActionProvider", doc.uri, editor.selection);
+    const titles = (actions ?? []).map(a => a.title);
+    const copilotTitles = titles.filter(t => t.includes("Copilot"));
+    log(copilotTitles.some(t => t.includes("润色")) && copilotTitles.some(t => t.includes("扩写")) && copilotTitles.some(t => t.includes("换视角")), "灯泡提供 Copilot 改写动作 (" + copilotTitles.length + " 项)");
+    editor.selection = new vscode.Selection(start, start);
+  });
+
+  await step("Copilot 真实续写（扩展链路 → 127.0.0.1:8788）", async () => {
+    // 通过扩展的内部测试钩子直接写 key，避免弹窗
+    await vscode.commands.executeCommand("novelpad._test.setApiKey", "11223344");
+    const before = doc.getText().length;
+    const cursor = doc.positionAt(before);
+    editor.selection = new vscode.Selection(cursor, cursor);
+    await vscode.commands.executeCommand("novelpad._test.continueAtCursor");
+    await new Promise(r => setTimeout(r, 1500));
+    const added = editor.document.getText().slice(before).trim();
+    log(added.length > 20, "续写插入了 " + added.length + " 字: " + added.slice(0, 40).replace(/\n/g, " ") + "…");
+    await vscode.commands.executeCommand("undo");
+    await editor.document.save();
+  });
 };
 `;
 

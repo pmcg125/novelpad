@@ -100,6 +100,48 @@
         "command": "novelpad.refresh",
         "title": "NovelPad: 刷新",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "novelpad.copilot.continue",
+        "title": "NovelPad: Copilot 续写（带要求）",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "novelpad.copilot.continueDirect",
+        "title": "NovelPad: Copilot 续写"
+      },
+      {
+        "command": "novelpad.copilot.editSelection",
+        "title": "NovelPad: Copilot 改写选中文字"
+      },
+      {
+        "command": "novelpad.copilot.ask",
+        "title": "NovelPad: Copilot 问问设定",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "novelpad.copilot.setApiKey",
+        "title": "NovelPad: Copilot 设置 API Key"
+      },
+      {
+        "command": "novelpad.copilot.testConnection",
+        "title": "NovelPad: Copilot 测试连接"
+      },
+      {
+        "command": "novelpad.copilot.edit",
+        "title": "NovelPad: Copilot 改写（内部）"
+      },
+      {
+        "command": "novelpad.copilot.draftCharacter",
+        "title": "NovelPad: Copilot 生成角色卡草稿"
+      },
+      {
+        "command": "novelpad._test.setApiKey",
+        "title": "NovelPad: (internal) set api key"
+      },
+      {
+        "command": "novelpad._test.continueAtCursor",
+        "title": "NovelPad: (internal) continue at cursor"
       }
     ],
     "menus": {
@@ -145,6 +187,18 @@
         {
           "command": "novelpad.openEntity",
           "when": "false"
+        },
+        {
+          "command": "novelpad.copilot.edit",
+          "when": "false"
+        },
+        {
+          "command": "novelpad._test.setApiKey",
+          "when": "false"
+        },
+        {
+          "command": "novelpad._test.continueAtCursor",
+          "when": "false"
         }
       ]
     },
@@ -170,10 +224,62 @@
           "type": "boolean",
           "default": true,
           "description": "在状态栏显示当前章节字数与全书字数。"
+        },
+        "novelpad.copilot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用 Novel Copilot（续写 / 润色 / 问答）。"
+        },
+        "novelpad.copilot.provider": {
+          "type": "string",
+          "enum": ["custom", "deepseek", "zhipu", "dashscope", "ollama", "openai"],
+          "enumDescriptions": [
+            "自定义 / 本地反代（默认 127.0.0.1:8788/v1）",
+            "DeepSeek 官方",
+            "智谱 GLM",
+            "通义千问 DashScope 兼容模式",
+            "Ollama 本地（无需 Key）",
+            "OpenAI 官方"
+          ],
+          "default": "custom",
+          "description": "服务商预设（决定默认 baseUrl，可被 novelpad.copilot.baseUrl 覆盖）。"
+        },
+        "novelpad.copilot.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI 兼容接口地址。留空则使用服务商预设。"
+        },
+        "novelpad.copilot.model": {
+          "type": "string",
+          "default": "deepseek-v4.1-flash",
+          "description": "续写用模型。"
+        },
+        "novelpad.copilot.editModel": {
+          "type": "string",
+          "default": "",
+          "description": "润色 / 扩写 / 问答用模型。留空则与续写相同。"
+        },
+        "novelpad.copilot.timeoutMs": {
+          "type": "number",
+          "default": 90000,
+          "description": "请求超时（毫秒）。推理模型建议 ≥ 60000。"
         }
       }
     },
-    "keybindings": [],
+    "keybindings": [
+      {
+        "command": "novelpad.copilot.continueDirect",
+        "key": "alt+\\",
+        "mac": "alt+\\",
+        "when": "editorLangId == markdown && editorTextFocus"
+      },
+      {
+        "command": "novelpad.copilot.continue",
+        "key": "alt+shift+\\",
+        "mac": "alt+shift+\\",
+        "when": "editorLangId == markdown && editorTextFocus"
+      }
+    ],
     "themes": [
       {
         "label": "宣纸 · NovelPad Paper",
@@ -208,9 +314,11 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@novelpad/core": "workspace:*"
+    "@novelpad/core": "workspace:*",
+    "marked": "^18.3.0"
   },
   "devDependencies": {
+    "@types/marked": "^6.0.0",
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^3.1.0",
