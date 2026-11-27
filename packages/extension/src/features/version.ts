@@ -236,6 +236,11 @@ export class VersionManager implements vscode.Disposable {
         return;
       }
       rec = out.record;
+      // 版本存下来了但没接上主干 → 「备份到云端」不会带上它。
+      // 不说的话作者会以为存完就安全了。
+      if (out.trunkSkipped) {
+        void vscode.window.showWarningMessage(`这一版已存进时间线，但没接上备份：${out.trunkSkipped}`);
+      }
       if (rec) this._onDidSnapshot.fire(rec);
     });
     return rec;

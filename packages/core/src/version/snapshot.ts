@@ -7,8 +7,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { ExecFn } from "./repo.js";
-import { AUTO_KEEP_PER_CHAPTER, AUTO_REF_PREFIX, autoRefs, autoRefName, createSnapshot, deleteRef, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readProjectFileAt, refExists, sanitizeRefComponent } from "./repo.js";
+import type { ExecFn, TrunkInfo } from "./repo.js";
+import { AUTO_KEEP_PER_CHAPTER, AUTO_REF_PREFIX, advanceTrunk, autoRefs, autoRefName, createSnapshot, deleteRef, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readProjectFileAt, refExists, resolveTrunk, sanitizeRefComponent, setRef } from "./repo.js";
+import { excludeLocalIndex } from "./branch.js";
 
 /* ============================================================
  * 类型
@@ -292,22 +293,76 @@ export function aiRecords(records: readonly SnapshotRecord[]): SnapshotRecord[] 
 export async function rebuildIndex(exec: ExecFn, root: string): Promise<SnapshotIndex> {
   const out: SnapshotRecord[] = [];
   for (const ref of await listRefs(exec, root, MILESTONE_REF_PREFIX)) {
-    out.push(synthesize(ref.name, ref.commit, ref.time, "milestone"));
+    out.push(synthesize(ref.name, ref.commit, ref.time, "milestone", ref.subject));
   }
   for (const ref of await listRefs(exec, root, PUBLISH_REF_PREFIX)) {
-    out.push(synthesize(ref.name, ref.commit, ref.time, "publish"));
+    out.push(synthesize(ref.name, ref.commit, ref.time, "publish", ref.subject));
   }
   for (const ref of await autoRefs(exec, root)) {
-    out.push(synthesize(ref.name, ref.commit, ref.time, "auto"));
+    out.push(synthesize(ref.name, ref.commit, ref.time, "auto", ref.subject));
   }
   const idx: SnapshotIndex = { version: 1, snapshots: out };
   saveIndex(root, idx);
   return idx;
 }
 
-function synthesize(ref: string, commit: string, time: string, kind: SnapshotKind): SnapshotRecord {
+/**
+ * 只把「索引里还没有的 ref」补进索引，**不覆盖已有记录**。
+ *
+ * 与 rebuildIndex 的区别不是细节：synthesize 只能从 ref 名反推出
+ * kind / 时间 / 章节，**推不出作者写的标签、备注、字数和 AI 来源**。
+ * 索引丢失时用它兜底是对的（有总比没有强），但换机器取回时如果直接
+ * rebuildIndex，本地已有的完整记录会被这份残缺版本盖掉——
+ * 「第三章 改完雨夜对峙」变成一条没有时间线的匿名版本。
+ *
+ * 所以取回走这个函数：已有的一条不动，只补云端新来的。
+ */
+export async function backfillFromRefs(exec: ExecFn, root: string): Promise<{ added: number; index: SnapshotIndex }> {
+  const idx = loadIndex(root);
+  const known = new Set(idx.snapshots.map((s) => s.ref));
+  const fresh: SnapshotRecord[] = [];
+
+  const collect = async (refs: Awaited<ReturnType<typeof listRefs>>, kind: SnapshotKind) => {
+    for (const ref of refs) {
+      if (known.has(ref.name)) continue;
+      fresh.push(synthesize(ref.name, ref.commit, ref.time, kind, ref.subject));
+    }
+  };
+
+  await collect(await listRefs(exec, root, MILESTONE_REF_PREFIX), "milestone");
+  await collect(await listRefs(exec, root, PUBLISH_REF_PREFIX), "publish");
+  await collect(await autoRefs(exec, root), "auto");
+
+  if (fresh.length) {
+    idx.snapshots = [...idx.snapshots, ...fresh];
+    saveIndex(root, idx);
+  }
+  return { added: fresh.length, index: idx };
+}
+
+/**
+ * 从 ref 反推一条索引记录（索引是缓存，ref 才是真相）。
+ *
+ * `subject` 是提交信息的主题行，也是**唯一还能找回作者标签的途径**：
+ * 里程碑的提交信息固定是 `milestone: <作者写的那句>`，所以换一台机器
+ * clone + 取回之后，时间线上显示的是「第二章 渡口」而不是一个匿名版本。
+ * 不传或格式不符时留空——猜出来的假标签比没有标签更糟。
+ *
+ * 自动存档的主题（`auto: 003 <时间>`）是内部编号，不是作者写的字，
+ * 所以只有里程碑取标签。
+ */
+function synthesize(
+  ref: string,
+  commit: string,
+  time: string,
+  kind: SnapshotKind,
+  subject?: string,
+): SnapshotRecord {
   const tail = ref.split("/").pop() ?? "";
   const fromRef = ref.startsWith(AUTO_REF_PREFIX) ? ref.slice(AUTO_REF_PREFIX.length).split("/")[0] : undefined;
+  const label = kind === "milestone" && subject?.startsWith("milestone: ")
+    ? subject.slice("milestone: ".length).trim() || undefined
+    : undefined;
   return {
     id: `${kind === "auto" ? "s" : kind === "milestone" ? "m" : "p"}_${tail}`,
     ref,
@@ -316,6 +371,7 @@ function synthesize(ref: string, commit: string, time: string, kind: SnapshotKin
     time: time || new Date(0).toISOString(),
     files: [],
     chapter: fromRef,
+    ...(label ? { label } : {}),
     origin: { kind: "human" },
   };
 }
@@ -341,6 +397,21 @@ export interface AutoSnapshotOutput {
   record?: SnapshotRecord;
   empty?: boolean;
   error?: string;
+}
+
+/**
+ * 里程碑的返回。比自动存档多两个字段，因为「存一版」除了造版本，
+ * 还要把主干推进——而推进可能失败或根本不该做。
+ *
+ * `ok: true` 只代表**版本存下来了**。`trunkSkipped` 有值时它没进主干，
+ * 也就是「备份到云端」不会把它推上去。调用方必须把这个区别告诉作者，
+ * 否则他以为点了存就安全了。
+ */
+export interface MilestoneOutput extends AutoSnapshotOutput {
+  /** 推进了哪条分支 */
+  trunk?: string;
+  /** 没推进主干的原因（人话） */
+  trunkSkipped?: string;
 }
 
 /**
@@ -410,21 +481,44 @@ export async function autoSnapshot(exec: ExecFn, input: AutoSnapshotInput): Prom
 export async function milestoneSnapshot(
   exec: ExecFn,
   input: { root: string; label: string; note?: string; files?: readonly string[]; totalWords: number; deltaWords?: number; at?: Date },
-): Promise<AutoSnapshotOutput> {
+): Promise<MilestoneOutput> {
   const at = input.at ?? new Date();
   const id = makeId("milestone", at);
   const ref = milestoneRefName(id);
-  const res = await createSnapshot(exec, input.root, {
+
+  // 主干是「备份到云端」真正推出去的那条分支。设计里里程碑就该落在它上面
+  // （docs/PLAN-VERSIONING.md §2.2：`refs/heads/main` 作者手动里程碑，可见、可推送）。
+  const trunk = await resolveTrunk(exec, input.root);
+
+  const place = await milestonePlacement(exec, input.root, trunk);
+
+  // 主干未出生时，这一版就是这部作品的**全部**。
+  // 哪怕调用方只给了几个文件，也必须收整个作品目录——否则第一条主稿
+  // 里只有那几章，其余章节和设定永远不在主干上（备份出去就是残缺的）。
+  // applyMerge 里同样的判断（`baseExists ? writablePaths : ["."]`）。
+  const firstOnTrunk = Boolean(trunk && !trunk.tip);
+  const paths = firstOnTrunk ? ["."] : input.files && input.files.length ? input.files : undefined;
+
+  const snap = await createSnapshot(exec, input.root, {
     message: `milestone: ${input.label}`,
-    paths: input.files && input.files.length ? input.files : undefined,
+    paths,
     ref,
-    // 里程碑接在 HEAD 上，形成可读的连续历史（作者推 GitHub 时看得懂）
+    ...place,
   });
-  if (!res.ok) return { ok: false, error: res.error };
+  if (!snap.ok) return { ok: false, error: snap.error };
+
+  // 内容与主干一字不差：没有新提交，但作者确实点了一次「存一版」，
+  // 标签得留下。把里程碑 ref 补挂到主干顶端那个提交上——不补的话
+  // rebuildIndex 扫不到这个 ref，索引一重建这条标签就凭空消失。
+  let commit = snap.commit!;
+  if (snap.empty && trunk?.tip) {
+    commit = trunk.tip;
+    await setRef(exec, input.root, ref, trunk.tip);
+  }
 
   const rec = makeRecord({
     kind: "milestone",
-    commit: res.commit!,
+    commit,
     ref,
     at,
     files: input.files ? [...input.files] : [],
@@ -435,7 +529,130 @@ export async function milestoneSnapshot(
     id,
   });
   appendRecord(input.root, rec);
-  return { ok: true, record: rec, empty: res.empty };
+
+  const out: MilestoneOutput = { ok: true, record: rec, empty: snap.empty };
+  if (!trunk) {
+    // 分离 HEAD（作者自己 checkout 过 commit）：没有能推进的分支。
+    // 硬造一个分支名会把稿子推到他看不见的地方，所以这里只做本地版本。
+    out.trunkSkipped = "这部作品当前不在任何分支上（可能手动检出过某个版本），这一版只存在本地。";
+    return out;
+  }
+  out.trunk = trunk.name;
+
+  // 空版没造新提交，主干自然也不用动（内容本来就等于主干顶端）。
+  if (snap.empty) return out;
+
+  const adv = await advanceTrunk(exec, input.root, trunk.ref, commit, trunk.tip);
+  if (!adv.ok) {
+    // 版本已经存下（ref 与索引都在），但主干没前进 → 备份会漏掉这一版。
+    // 不能当成成功返回，否则作者以为稿子已经上云了。
+    out.trunkSkipped = adv.raced
+      ? "另一个窗口同时存了版本，这一版没能接上主干。再点一次「存一版」即可。"
+      : `这一版存下来了，但没能接上主干：${adv.error}`;
+  }
+  return out;
+}
+
+/**
+ * 里程碑提交该接在谁后面、以什么为基底。
+ *
+ * 三种情形，区别在于**树的内容从哪来**：
+ *
+ *   - 主干已存在 → base = 主干整棵树，paths 的改动叠加上去。
+ *     没有 base 的话 `git add -A -- <paths>` 得到的树只含本次文件，
+ *     主干上其余章节与设定会凭空从历史里消失（这条踩过，见 repo.ts）。
+ *   - 分支未出生（新建作品的常态）→ 独立根提交，此刻工作区就是第一版。
+ *   - 分离 HEAD → 退回接在 HEAD 上，不碰任何分支。
+ */
+async function milestonePlacement(
+  exec: ExecFn,
+  root: string,
+  trunk: TrunkInfo | undefined,
+): Promise<{ base?: string; parent?: string | "none" }> {
+  if (!trunk) return {}; // 默认：接 HEAD
+  if (trunk.unborn) {
+    // 第一次存版之前必须把本地缓存排除掉，否则 snapshots.json 会进主干，
+    // 之后排除它时 `git status` 又显示成「已删除」。
+    await excludeLocalIndex(exec, root);
+    return { parent: "none" };
+  }
+  return { base: trunk.tip, parent: trunk.tip };
+}
+
+/* ============================================================
+ * 主干同步（托管的前置动作）
+ * ============================================================ */
+
+export interface TrunkSyncResult {
+  ok: boolean;
+  /** 主干现在指向的提交 */
+  commit?: string;
+  /** 内容与主干一致，没有产生新版本 */
+  unchanged?: boolean;
+  /** 无法同步的原因（人话）。有它时 `ok` 仍可能为 true——本地版本没丢，只是备份带不上 */
+  skipped?: string;
+  error?: string;
+}
+
+/**
+ * 把此刻工作区的全部内容同步到主干。
+ *
+ * 为什么需要它：**自动存档不碰主干**（它们挂 `refs/novelpad/auto/…`，
+ * 按章滚动清理）。于是「写完三小时没点存一版，直接点备份」会只推上去
+ * 上次里程碑的内容——作者看到"已备份"，云端却是几小时前的稿子。
+ *
+ * 所以备份前先做一次全量同步。它**不写索引**：主干是托管用的管道，
+ * 作者的时间线只关心他主动存的那几版，凭空多出「备份」条目只会刷屏。
+ */
+export async function syncTrunk(
+  exec: ExecFn,
+  root: string,
+  opts: { message?: string } = {},
+): Promise<TrunkSyncResult> {
+  const trunk = await resolveTrunk(exec, root);
+  if (!trunk) {
+    return {
+      ok: false,
+      skipped: "这部作品当前不在任何分支上（可能手动检出过某个版本），没法把它接到主干备份。请先在源代码管理里切回分支。",
+    };
+  }
+
+  if (trunk.unborn) {
+    await excludeLocalIndex(exec, root);
+    const res = await createSnapshot(exec, root, {
+      message: opts.message ?? `NovelPad：${new Date().toISOString().slice(0, 10)} 的稿子`,
+      paths: ["."],
+      parent: "none",
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+    const adv = await advanceTrunk(exec, root, trunk.ref, res.commit!);
+    if (!adv.ok) return { ok: false, error: adv.error };
+    return { ok: true, commit: res.commit };
+  }
+
+  const res = await createSnapshot(exec, root, {
+    message: opts.message ?? `NovelPad：${new Date().toISOString().slice(0, 10)} 的稿子`,
+    // 全量：主干的意义就是「此刻完整的稿子」
+    paths: ["."],
+    ref: undefined,
+    base: trunk.tip,
+    parent: trunk.tip,
+    // 与主干顶端一字不差时不造新提交，否则每次备份都多一条空提交
+    dedupeAgainst: trunk.tip,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  if (res.empty) return { ok: true, commit: res.commit, unchanged: true };
+
+  const adv = await advanceTrunk(exec, root, trunk.ref, res.commit!, trunk.tip);
+  if (!adv.ok) {
+    return {
+      ok: false,
+      error: adv.raced
+        ? "另一个窗口同时改了版本，没能接上主干。再点一次备份即可。"
+        : adv.error,
+    };
+  }
+  return { ok: true, commit: res.commit };
 }
 
 /** 读回某快照中的正文（用于 diff 与预览）；路径相对作品根 */

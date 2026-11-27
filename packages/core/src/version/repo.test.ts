@@ -131,7 +131,11 @@ function makeFakeGit(over: Partial<FakeState> = {}) {
     if (cmd === "for-each-ref") {
       const prefix = args[args.length - 1];
       const names = [...st.refs.keys()].filter((r) => r.startsWith(prefix)).sort();
-      return ok(names.map((n) => `${n}\u001f${st.refs.get(n)}\u001f${st.times.get(st.refs.get(n)!) ?? ""}`).join("\n") + (names.length ? "\n" : ""));
+      // 第 4 个字段是提交主题（%(subject)）；真实 git 现在会输出它
+      return ok(
+        names.map((n) => `${n}\u001f${st.refs.get(n)}\u001f${st.times.get(st.refs.get(n)!) ?? ""}\u001f`).join("\n") +
+          (names.length ? "\n" : ""),
+      );
     }
 
     if (cmd === "log") {

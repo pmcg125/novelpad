@@ -12,8 +12,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ExecFn } from "./repo.js";
+import { rebuildIndex } from "./snapshot.js";
 import {
   detectHost,
+  ensureHostingFetch,
   explainPushError,
   listRemotes,
   pull,
@@ -263,6 +265,13 @@ describe("pushPreview", () => {
   });
 });
 
+/*
+ * 这一组每个用例都要起十几个 git 进程（clone / fetch / push / merge），
+ * Windows 上单次 spawn 就要一两百毫秒，默认 5s 会随机超时。
+ * 逐个用例放宽（第三个参数），不写进全局配置：那样会掩盖别的用例真的变慢。
+ */
+const GIT = 60_000;
+
 describe("push / pull（真实 git）", () => {
   it("推到本地裸仓库，pushPreview 随后归零", async () => {
     await setRemote(exec, root, "origin", bare);
@@ -276,7 +285,7 @@ describe("push / pull（真实 git）", () => {
     const p = await pushPreview(exec, root);
     expect(p.ahead).toBe(0);
     expect(p.hasUpstream).toBe(true);
-  });
+  }, GIT);
 
   it("第二次推送（内容没变）也成功，不报「已是最新」为错误", async () => {
     await setRemote(exec, root, "origin", bare);
@@ -284,7 +293,7 @@ describe("push / pull（真实 git）", () => {
     expect(first.ok).toBe(true);
     const second = await push(exec, { root, remote: "origin", branch: "main" });
     expect(second.ok).toBe(true);
-  });
+  }, GIT);
 
   it("远端是自己的另一个克隆时，pull 能把新提交拿下来", async () => {
     await setRemote(exec, root, "origin", bare);
@@ -313,7 +322,7 @@ describe("push / pull（真实 git）", () => {
     } finally {
       fs.rmSync(other, { recursive: true, force: true });
     }
-  });
+  }, GIT);
 
   it("没有新内容时 pull 报 updated: false（不误报「有更新」）", async () => {
     await setRemote(exec, root, "origin", bare);
@@ -321,7 +330,89 @@ describe("push / pull（真实 git）", () => {
     const r = await pull(exec, root);
     expect(r.ok).toBe(true);
     expect(r.updated).toBe(false);
-  });
+  }, GIT);
+
+  it("推送带上里程碑 / 发布版 ref，另一台机器 pull 能重建时间线", async () => {
+    await setRemote(exec, root, "origin", bare);
+    write("chapters/001.md", "# 第一章\n");
+    await git("add", "-A");
+    // 提交信息按 milestoneSnapshot 的真实格式写：标签只能从这里找回来
+    // （snapshots.json 是本地缓存，故意不进 git）
+    await git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "milestone: 第二章 渡口");
+    const tip = (await git("rev-parse", "HEAD")).trim();
+    // 里程碑挂在提交上（真实流程里由 milestoneSnapshot 造）
+    await git("update-ref", "refs/novelpad/milestone/m_1", tip);
+    await git("update-ref", "refs/novelpad/publish/v1", tip);
+    // 自动存档不该被推上去：它是可重建的短期缓存
+    await git("update-ref", "refs/novelpad/auto/001/20261127", tip);
+
+    expect((await push(exec, { root, remote: "origin", branch: "main" })).ok).toBe(true);
+
+    const remoteRefs = (await exec(["for-each-ref", "--format=%(refname)"], { cwd: bare })).stdout;
+    expect(remoteRefs).toContain("refs/heads/main");
+    expect(remoteRefs).toContain("refs/novelpad/milestone/m_1");
+    expect(remoteRefs).toContain("refs/novelpad/publish/v1");
+    expect(remoteRefs).not.toContain("refs/novelpad/auto/");
+
+    // 新机器：clone 只拿 refs/heads/*，必须有 fetch 配置才能取回时间线
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "np-remote-tl-"));
+    try {
+      const inOther = async (...args: string[]) => {
+        const res = await exec(args, { cwd: other });
+        if (res.code !== 0) throw new Error(`git ${args.join(" ")}: ${res.stderr}`);
+        return res.stdout;
+      };
+      await inOther("clone", "-q", bare, ".");
+      await inOther("config", "core.autocrlf", "false");
+      // merge --ff-only 通常不需要身份，但别让测试依赖机器上的全局配置
+      await inOther("config", "user.name", "o");
+      await inOther("config", "user.email", "o@o");
+      expect(await inOther("for-each-ref", "refs/novelpad")).toBe("");
+
+      const r = await pull(exec, other);
+      expect(r.ok).toBe(true);
+      const got = (await exec(["for-each-ref", "--format=%(refname)", "refs/novelpad"], { cwd: other })).stdout;
+      expect(got).toContain("refs/novelpad/milestone/m_1");
+      expect(got).toContain("refs/novelpad/publish/v1");
+
+      // 时间线真的能重建出来，而且作者写的标签还在
+      const idx = await rebuildIndex(exec, other);
+      expect(idx.snapshots.map((s) => s.kind).sort()).toEqual(["milestone", "publish"]);
+      const milestone = idx.snapshots.find((s) => s.kind === "milestone");
+      expect(milestone?.label).toBe("第二章 渡口");
+      // 反例守卫：publish 的 ref 指向同一条提交，但它的标签不该被误当成里程碑标签
+      expect(idx.snapshots.find((s) => s.kind === "publish")?.label).toBeUndefined();
+    } finally {
+      fs.rmSync(other, { recursive: true, force: true });
+    }
+  }, GIT);
+
+  it("从没存过版时推送不因通配 refspec 无匹配而失败", async () => {
+    await setRemote(exec, root, "origin", bare);
+    const r = await push(exec, { root, remote: "origin", branch: "main" });
+    expect(r.ok).toBe(true);
+    const refs = (await exec(["for-each-ref", "--format=%(refname)"], { cwd: bare })).stdout;
+    expect(refs).not.toContain("refs/novelpad/");
+  }, GIT);
+
+  it("ensureHostingFetch 幂等，且不会堆重复条目", async () => {
+    await setRemote(exec, root, "origin", bare);
+    expect((await ensureHostingFetch(exec, root, "origin")).added).toBeGreaterThan(0);
+    const second = await ensureHostingFetch(exec, root, "origin");
+    expect(second.ok).toBe(true);
+    expect(second.added).toBe(0);
+
+    const all = (await exec(["config", "--get-all", "remote.origin.fetch"], { cwd: root })).stdout
+      .split(/\r?\n/)
+      .filter(Boolean);
+    expect(new Set(all).size).toBe(all.length);
+  }, GIT);
+
+  it("远端不存在时说清而不是静默", async () => {
+    const r = await ensureHostingFetch(exec, root, "nope");
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("找不到远端");
+  }, GIT);
 
   it("两边分叉时 pull 拒绝并给出人话（不强合，避免搅乱作者的稿子）", async () => {
     await setRemote(exec, root, "origin", bare);
@@ -353,5 +444,5 @@ describe("push / pull（真实 git）", () => {
     } finally {
       fs.rmSync(other, { recursive: true, force: true });
     }
-  });
+  }, GIT);
 });

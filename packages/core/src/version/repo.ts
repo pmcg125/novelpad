@@ -298,22 +298,35 @@ export interface RefInfo {
   commit: string;
   /** 提交时间 ISO；取不到时为空串 */
   time: string;
+  /**
+   * 提交信息的主题行（第一行）。
+   * 里程碑是 `milestone: <作者写的标签>`——这是索引丢失或换机器时
+   * **唯一还能找回标签的地方**（snapshots.json 故意不进 git）。
+   */
+  subject?: string;
 }
 
 /**
  * 列出某个命名空间下的 ref，按提交时间新到旧。
  * 用 for-each-ref 一次取完，避免每个 ref 跑一次 log。
+ *
+ * 分隔符用 `%1f`（U+001F）：在 for-each-ref 的 --format 里，`%1f` 才是
+ * 合法的转义（等价 `%1F`），**`%x1f` 会原样输出成字面量**——实测确认。
+ * 提交信息里出现控制字符的现实中概率≈0，主题行更是作者自己打的一行字。
  */
 export async function listRefs(exec: ExecFn, root: string, prefix: string): Promise<RefInfo[]> {
-  const r = await exec(["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(creatordate:iso-strict)", prefix], { cwd: root });
+  const r = await exec(
+    ["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(creatordate:iso-strict)%1f%(subject)", prefix],
+    { cwd: root },
+  );
   if (r.code !== 0) return [];
   return r.stdout
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
     .map((line) => {
-      const [name = "", commit = "", time = ""] = line.split("\u001f");
-      return { name, commit, time };
+      const [name = "", commit = "", time = "", subject = ""] = line.split("\u001f");
+      return { name, commit, time, subject: subject || undefined };
     })
     .filter((x) => x.name)
     .sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : a.name < b.name ? 1 : -1));
@@ -452,6 +465,93 @@ export async function deleteRef(exec: ExecFn, root: string, ref: string): Promis
 export async function refExists(exec: ExecFn, root: string, ref: string): Promise<boolean> {
   const r = await exec(["show-ref", "--verify", "--quiet", ref], { cwd: root });
   return r.code === 0;
+}
+
+/* ============================================================
+ * 主干（作者唯一一条「当前稿子」所在的分支）
+ * ============================================================ */
+
+export interface TrunkInfo {
+  /** 分支短名，如 `main` */
+  name: string;
+  /** 完整 ref，如 `refs/heads/main` */
+  ref: string;
+  /** 顶端提交；分支还没出生时是 undefined */
+  tip?: string;
+  /** HEAD 指向的分支尚无任何提交——这是新建作品时的常态 */
+  unborn: boolean;
+}
+
+/**
+ * 解析当前分支（主干）。
+ *
+ * 返回 undefined 表示 **分离 HEAD**（作者自己 `git checkout <sha>` 过）。
+ * 那种情况下没有可推进的分支，调用方必须放弃托管而不是硬造一个分支名——
+ * 猜错分支名会把稿子推到一个他看不见的分支上。
+ */
+export async function resolveTrunk(exec: ExecFn, root: string): Promise<TrunkInfo | undefined> {
+  const head = await exec(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root });
+  const name = head.code === 0 ? head.stdout.trim() : "";
+  if (!name) return undefined;
+
+  const ref = `refs/heads/${name}`;
+  const tip = await exec(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { cwd: root });
+  const commit = tip.code === 0 ? tip.stdout.trim() : "";
+  return commit ? { name, ref, tip: commit, unborn: false } : { name, ref, unborn: true };
+}
+
+/**
+ * 把 ref 指到某个提交（里程碑为空时补挂，见 snapshot.ts 的说明）。
+ */
+export async function setRef(exec: ExecFn, root: string, ref: string, commit: string): Promise<boolean> {
+  const r = await exec(["update-ref", ref, commit], { cwd: root });
+  return r.code === 0;
+}
+
+export interface AdvanceResult {
+  ok: boolean;
+  /**
+   * 分支在我们读完之后又被移动了（另一个窗口刚推过 / 作者自己提交过）。
+   * 此时**不覆盖**——覆盖会丢掉那边已经存在的提交。
+   */
+  raced?: boolean;
+  error?: string;
+}
+
+/**
+ * 把主干推进到新提交，并同步索引。
+ *
+ * 两个必须一起做的动作：
+ *
+ * 1. `update-ref <ref> <新> <旧>`——带旧值，等于一次乐观锁。
+ *    不带旧值时，两个写作窗口同时「存一版」会互相覆盖分支指针，
+ *    后写的把先写的提交从历史里摘掉（对象还在，但没人指向它）。
+ * 2. `reset --mixed <新> -- .`——**不能省**。分支指针动了而索引没跟上，
+ *    `git status` 会把索引里有、新提交里没有的文件全显示成「已删除」，
+ *    作者打开源代码管理面板会看到自己整部稿子被删了。
+ *    只重置 cwd 下的路径，作品位于仓库子目录时不碰仓库其他文件。
+ */
+export async function advanceTrunk(
+  exec: ExecFn,
+  root: string,
+  ref: string,
+  commit: string,
+  expectedOld?: string,
+): Promise<AdvanceResult> {
+  const args = ["update-ref", ref, commit];
+  if (expectedOld) args.push(expectedOld);
+  const upd = await exec(args, { cwd: root });
+  if (upd.code !== 0) {
+    return { ok: false, raced: Boolean(expectedOld), error: upd.stderr.trim() || "git update-ref 失败" };
+  }
+
+  const reset = await exec(["reset", "--mixed", commit, "--", "."], { cwd: root });
+  if (reset.code !== 0) {
+    // 分支已经动了，索引没同步：`git status` 会看起来不对，但稿子本身没事。
+    // 报出来，让调用方知道这次不干净。
+    return { ok: false, error: reset.stderr.trim() || "推进了版本，但工作区状态没同步（不影响稿子内容）" };
+  }
+  return { ok: true };
 }
 
 /** 全部自动存档（供时间线视图使用） */

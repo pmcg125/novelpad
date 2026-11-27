@@ -6,6 +6,7 @@ import {
   aiRecords,
   appendRecord,
   autoSnapshot,
+  backfillFromRefs,
   groupByDay,
   indexPath,
   loadIndex,
@@ -20,25 +21,46 @@ import {
   saveIndex,
   saveSession,
   sessionPath,
+  syncTrunk,
   wordSeries,
   writeJsonAtomic,
   type SnapshotRecord,
 } from "./snapshot.js";
-import { autoRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, type ExecFn, type ExecResult } from "./repo.js";
+import {
+  AUTO_REF_PREFIX,
+  autoRefName,
+  MILESTONE_REF_PREFIX,
+  PUBLISH_REF_PREFIX,
+  type ExecFn,
+  type ExecResult,
+} from "./repo.js";
 
 /* ============================================================
  * 最小假 git（只覆盖 snapshot.ts 用到的命令）
  * ============================================================ */
 
-function makeGit(over: { dirty?: boolean } = {}) {
-  const refs = new Map<string, string>();
+function makeGit(over: { dirty?: boolean; branch?: string | null; refs?: Record<string, string> } = {}) {
+  const refs = new Map<string, string>(Object.entries(over.refs ?? {}));
   const parents = new Map<string, string>();
   const times = new Map<string, string>();
   const trees = new Map<string, string>();
   const objects = new Set<string>();
-  const current = { tree: "tree-0", dirty: over.dirty ?? true, seq: 0, refs, parents, times, trees };
+  // 预置的 ref 顶端要能被 rev-parse 认出来（真实 git 里它们是存在的提交对象）
+  for (const commit of refs.values()) objects.add(commit);
+  // commit-tree 的 -m：真实 git 会把首行作为 %(subject) 回吐，桩照做
+  const messages = new Map<string, string>();
+  // HEAD 指向的分支名。null = 分离 HEAD（作者自己 checkout 过某个版本）。
+  const branch = over.branch === undefined ? "main" : over.branch;
+  // 每次调用的参数，用于断言「有没有带 base / 父提交是谁」
+  const calls: string[][] = [];
+  const current = {
+    tree: "tree-0", dirty: over.dirty ?? true, seq: 0, refs, parents, times, trees, messages, branch, calls,
+    // 置 true 模拟分支被别的窗口抢先推进（update-ref 的旧值不匹配）
+    failUpdateRef: false,
+  };
 
   const exec: ExecFn = async (args) => {
+    calls.push([...args]);
     const cmd = args[0];
     const ok = (s = ""): ExecResult => ({ code: 0, stdout: s, stderr: "" });
     const bad = (s = "boom"): ExecResult => ({ code: 1, stdout: "", stderr: s });
@@ -46,6 +68,12 @@ function makeGit(over: { dirty?: boolean } = {}) {
     if (cmd === "add") return ok();
     // 临时索引从空树开始：桩里只需确认命令被调用过
     if (cmd === "read-tree") return ok();
+    // advanceTrunk / ensureBaseline 同步索引用；桩里只需确认被调用
+    if (cmd === "reset") return ok();
+    if (cmd === "symbolic-ref") {
+      if (!branch) return bad("not a symbolic ref");
+      return ok(branch + "\n");
+    }
     if (cmd === "write-tree") {
       if (!current.dirty) return ok(current.tree);
       current.seq++;
@@ -64,7 +92,9 @@ function makeGit(over: { dirty?: boolean } = {}) {
         const t = trees.get(id) ?? (objects.has(id) ? "tree-" + id.slice(1) : undefined);
         return t ? ok(t + "\n") : bad();
       }
-      const id = refs.get(spec.replace(/\^\{commit\}$/, ""));
+      // 提交对象本身也能 rev-parse（主干顶端存的直接就是 commit id）
+      const key = spec.replace(/\^\{commit\}$/, "");
+      const id = refs.get(key) ?? (objects.has(key) || trees.has(key) ? key : undefined);
       return id ? ok(id + "\n") : bad();
     }
     if (cmd === "commit-tree") {
@@ -74,11 +104,17 @@ function makeGit(over: { dirty?: boolean } = {}) {
       objects.add(id);
       trees.set(id, tree);
       times.set(id, new Date(Date.UTC(2026, 10, 27, 10, 0, current.seq)).toISOString());
+      const mi = args.indexOf("-m");
+      if (mi > 0) messages.set(id, String(args[mi + 1] ?? "").split(/\r?\n/)[0]);
       const pi = args.indexOf("-p");
       if (pi > 0) parents.set(id, args[pi + 1]);
       return ok(id + "\n");
     }
     if (cmd === "update-ref") {
+      // 只让「带旧值的 CAS 形式」失败（update-ref <ref> <new> <old>）：
+      // 那才是分支被别的窗口抢推。createSnapshot 挂里程碑 ref 用的
+      // 两参数形式必须照样成功，否则整个测试场景与真实 git 不符。
+      if (current.failUpdateRef && args.length >= 4) return bad("cannot lock ref");
       if (args[1] === "-d") refs.delete(args[2]);
       else refs.set(args[1], args[2]);
       return ok();
@@ -90,7 +126,13 @@ function makeGit(over: { dirty?: boolean } = {}) {
     if (cmd === "for-each-ref") {
       const prefix = args[args.length - 1];
       const names = [...refs.keys()].filter((r) => r.startsWith(prefix)).sort();
-      return ok(names.map((n) => `${n}\u001f${refs.get(n)}\u001f${times.get(refs.get(n)!) ?? ""}`).join("\n"));
+      // 真实 git 现在输出 4 个字段（第 4 个是提交主题），桩必须跟上，
+      // 否则测的是「git 永远不会给出」的形状，标签恢复那条路径等于没测。
+      return ok(
+        names
+          .map((n) => `${n}\u001f${refs.get(n)}\u001f${times.get(refs.get(n)!) ?? ""}\u001f${messages.get(refs.get(n)!) ?? ""}`)
+          .join("\n"),
+      );
     }
     if (cmd === "show") {
       const [commit, p] = args[1].split(":");
@@ -206,7 +248,8 @@ describe("pruneAutoSnapshots", () => {
           .sort((a, b) => (a < b ? 1 : -1));
         return {
           code: 0,
-          stdout: list.map((r) => `${r}\u001f${"c-" + r}\u001f2026-11-27T10:00:00+08:00`).join("\n"),
+          // 4 个字段：与 listRefs 现在要求的格式一致（第 4 个是提交主题）
+          stdout: list.map((r) => `${r}\u001f${"c-" + r}\u001f2026-11-27T10:00:00+08:00\u001f`).join("\n"),
           stderr: "",
         };
       }
@@ -472,6 +515,171 @@ describe("milestoneSnapshot", () => {
     expect([...current.refs.keys()][0].startsWith(MILESTONE_REF_PREFIX)).toBe(true);
     expect(loadIndex(root).snapshots[0].label).toBe("第三章 改完雨夜对峙");
   });
+
+  /* ---- 主干：托管真正推出去的那条分支 ---- */
+
+  it("主干未出生时，存一版把分支建起来（否则备份推不出任何东西）", async () => {
+    const { exec, current } = makeGit();
+    expect(current.refs.has("refs/heads/main")).toBe(false);
+
+    const r = await milestoneSnapshot(exec, { root, label: "开篇", totalWords: 100, deltaWords: 100 });
+    expect(r.ok).toBe(true);
+    expect(r.trunk).toBe("main");
+    expect(r.trunkSkipped).toBeUndefined();
+    // 分支与里程碑 ref 指向同一个提交
+    expect(current.refs.get("refs/heads/main")).toBe(r.record?.commit);
+  });
+
+  it("主干已存在时，存一版推进它并带上整棵树作基底", async () => {
+    const { exec, current } = makeGit({ refs: { "refs/heads/main": "cOld" } });
+    current.tree = "tree-new";
+
+    const r = await milestoneSnapshot(exec, { root, label: "第二章", files: ["chapters/002.md"], totalWords: 200, deltaWords: 50 });
+    expect(r.ok).toBe(true);
+    expect(current.refs.get("refs/heads/main")).toBe(r.record?.commit);
+    expect(current.refs.get("refs/heads/main")).not.toBe("cOld");
+
+    // **必须带 base**：否则 write-tree 出来的树只含 chapters/002.md，
+    // 主干上其余章节会凭空从历史里消失。
+    const add = current.calls.find((a) => a[0] === "read-tree");
+    expect(add).toEqual(["read-tree", "cOld"]);
+    // 父提交是旧的主干顶端，历史是连续的
+    expect(current.parents.get(r.record!.commit)).toBe("cOld");
+  });
+
+  it("主干未出生时收全部内容，不受 files 限制", async () => {
+    const { exec, current } = makeGit();
+    const r = await milestoneSnapshot(exec, { root, label: "第一版", files: ["chapters/003.md"], totalWords: 10, deltaWords: 10 });
+    expect(r.ok).toBe(true);
+    // 空基底 + paths=["."]；若只收 003，第一条主稿就缺了其余章节
+    const read = current.calls.find((a) => a[0] === "read-tree");
+    expect(read).toEqual(["read-tree", "--empty"]);
+    const add = current.calls.find((a) => a[0] === "add");
+    expect(add).toContain(".");
+    expect(add).not.toContain("chapters/003.md");
+  });
+
+  it("内容与主干一字不差时不推进分支，但标签仍挂在主干顶端", async () => {
+    const { exec, current } = makeGit({ refs: { "refs/heads/main": "cSame" } });
+    // 主干顶端的树 == 本次要写的树 → createSnapshot 判定 empty
+    current.trees.set("cSame", "tree-1");
+    current.dirty = false;
+    current.tree = "tree-1";
+
+    const r = await milestoneSnapshot(exec, { root, label: "什么都没改", totalWords: 5, deltaWords: 0 });
+    expect(r.ok).toBe(true);
+    expect(r.empty).toBe(true);
+    // 分支没动
+    expect(current.refs.get("refs/heads/main")).toBe("cSame");
+    // 里程碑 ref 补挂到同一提交：不补的话 rebuildIndex 扫不到，标签会凭空消失
+    expect(current.refs.get(r.record!.ref)).toBe("cSame");
+    expect(loadIndex(root).snapshots[0].label).toBe("什么都没改");
+  });
+
+  it("分支被别的窗口抢推时如实说明，不覆盖那边的提交", async () => {
+    const { exec, current } = makeGit({ refs: { "refs/heads/main": "cOld" } });
+    current.tree = "tree-new";
+    current.failUpdateRef = true;
+
+    const r = await milestoneSnapshot(exec, { root, label: "冲突的一版", totalWords: 9, deltaWords: 1 });
+    // 版本本身存下来了（ref 与索引都在），所以 ok 是真的
+    expect(r.ok).toBe(true);
+    expect(r.record).toBeDefined();
+    // 但主干没前进：备份会漏掉它，必须让调用方知道
+    expect(r.trunkSkipped).toContain("另一个窗口");
+    expect(current.refs.get("refs/heads/main")).toBe("cOld");
+  });
+
+  it("分离 HEAD 时只做本地版本，不猜分支名", async () => {
+    const { exec, current } = makeGit({ branch: null });
+    const r = await milestoneSnapshot(exec, { root, label: "分离状态", totalWords: 1, deltaWords: 1 });
+    expect(r.ok).toBe(true);
+    expect(r.trunk).toBeUndefined();
+    expect(r.trunkSkipped).toContain("不在任何分支");
+    // 没有造出任何 refs/heads/*
+    expect([...current.refs.keys()].some((k) => k.startsWith("refs/heads/"))).toBe(false);
+  });
+});
+
+describe("syncTrunk", () => {
+  it("主干未出生时建出分支（新建作品从没点过存一版，直接备份）", async () => {
+    const { exec, current } = makeGit();
+    const r = await syncTrunk(exec, root);
+    expect(r.ok).toBe(true);
+    expect(r.skipped).toBeUndefined();
+    expect(current.refs.get("refs/heads/main")).toBe(r.commit);
+  });
+
+  it("同步不写索引：备份不该在时间线里刷出一堆条目", async () => {
+    const { exec } = makeGit();
+    const r = await syncTrunk(exec, root);
+    expect(r.ok).toBe(true);
+    expect(loadIndex(root).snapshots).toEqual([]);
+  });
+
+  it("推进主干时以旧顶端为基底（全量内容，不只是改动文件）", async () => {
+    const { exec, current } = makeGit({ refs: { "refs/heads/main": "cOld" } });
+    current.tree = "tree-new";
+    const r = await syncTrunk(exec, root);
+    expect(r.ok).toBe(true);
+    expect(current.refs.get("refs/heads/main")).toBe(r.commit);
+    const read = current.calls.find((a) => a[0] === "read-tree");
+    expect(read).toEqual(["read-tree", "cOld"]);
+    const add = current.calls.find((a) => a[0] === "add");
+    expect(add).toContain(".");
+  });
+
+  it("内容没变时 unchanged 且不动分支（避免每次备份一条空提交）", async () => {
+    const { exec, current } = makeGit({ refs: { "refs/heads/main": "cSame" } });
+    current.trees.set("cSame", "tree-1");
+    current.dirty = false;
+    current.tree = "tree-1";
+
+    const r = await syncTrunk(exec, root);
+    expect(r.ok).toBe(true);
+    expect(r.unchanged).toBe(true);
+    expect(current.refs.get("refs/heads/main")).toBe("cSame");
+  });
+
+  it("分离 HEAD 时明确拒绝，并说清该怎么走出来", async () => {
+    const { exec, current } = makeGit({ branch: null });
+    const r = await syncTrunk(exec, root);
+    expect(r.ok).toBe(false);
+    expect(r.skipped).toContain("不在任何分支");
+    expect([...current.refs.keys()].some((k) => k.startsWith("refs/heads/"))).toBe(false);
+  });
+});
+
+describe("backfillFromRefs", () => {
+  it("只补索引里没有的 ref，不覆盖已有记录", async () => {
+    const { exec, current } = makeGit();
+    // 索引里已有一条带标签的里程碑
+    const known = MILESTONE_REF_PREFIX + "m_keep";
+    appendRecord(root, makeRecord({ kind: "milestone", commit: "c1", ref: known, at: new Date(), files: [], label: "我写的标签", note: "备注", words: { total: 500, delta: 20 } }));
+    current.refs.set(known, "c1");
+    current.refs.set(MILESTONE_REF_PREFIX + "m_new", "c2");
+    current.times.set("c2", "2026-11-26T09:00:00Z");
+
+    const r = await backfillFromRefs(exec, root);
+    expect(r.added).toBe(1);
+    const idx = loadIndex(root);
+    expect(idx.snapshots).toHaveLength(2);
+    // 关键：已有记录的标签/备注/字数原样保留（rebuildIndex 会把它们冲掉）
+    const kept = idx.snapshots.find((s) => s.ref === known)!;
+    expect(kept.label).toBe("我写的标签");
+    expect(kept.note).toBe("备注");
+    expect(kept.words).toEqual({ total: 500, delta: 20 });
+    // 新补进来的用 ref 名反推
+    expect(idx.snapshots.find((s) => s.ref === MILESTONE_REF_PREFIX + "m_new")?.time).toBe("2026-11-26T09:00:00Z");
+  });
+
+  it("全部已知时不写盘（added 0）", async () => {
+    const { exec, current } = makeGit();
+    const ref = MILESTONE_REF_PREFIX + "m_x";
+    appendRecord(root, makeRecord({ kind: "milestone", commit: "c1", ref, at: new Date(), files: [] }));
+    current.refs.set(ref, "c1");
+    expect((await backfillFromRefs(exec, root)).added).toBe(0);
+  });
 });
 
 describe("rebuildIndex", () => {
@@ -492,5 +700,54 @@ describe("rebuildIndex", () => {
   it("无 ref 时得到空索引", async () => {
     const { exec } = makeGit();
     expect((await rebuildIndex(exec, root)).snapshots).toEqual([]);
+  });
+
+  it("从提交信息恢复作者写的标签（换机器后时间线不再是匿名版本）", async () => {
+    const { exec, current } = makeGit();
+    // 模拟另一台机器：ref 与提交对象在，snapshots.json 不在
+    current.refs.set(MILESTONE_REF_PREFIX + "m_a", "c1");
+    current.times.set("c1", "2026-11-26T09:00:00Z");
+    current.messages.set("c1", "milestone: 第二章 渡口");
+    current.refs.set(MILESTONE_REF_PREFIX + "m_b", "c2");
+    current.times.set("c2", "2026-11-25T09:00:00Z");
+    current.messages.set("c2", "milestone: 改完雨夜对峙\n\n章节：3");
+
+    const idx = await rebuildIndex(exec, root);
+    expect(idx.snapshots.find((s) => s.ref === MILESTONE_REF_PREFIX + "m_a")?.label).toBe("第二章 渡口");
+    // 多行信息只取主题行
+    expect(idx.snapshots.find((s) => s.ref === MILESTONE_REF_PREFIX + "m_b")?.label).toBe("改完雨夜对峙");
+  });
+
+  it("标签恢复不猜：主题不是 milestone: 开头时留空", async () => {
+    const { exec, current } = makeGit();
+    current.refs.set(MILESTONE_REF_PREFIX + "m_c", "c1");
+    current.times.set("c1", "2026-11-26T09:00:00Z");
+    current.messages.set("c1", "随便一次提交");
+    current.refs.set(AUTO_REF_PREFIX + "001/20261127", "c2");
+    current.times.set("c2", "2026-11-27T09:00:00Z");
+    current.messages.set("c2", "auto: 001 2026-11-27T09:00:00Z");
+
+    const idx = await rebuildIndex(exec, root);
+    // 猜出来的假标签比没有标签更糟
+    expect(idx.snapshots.find((s) => s.ref === MILESTONE_REF_PREFIX + "m_c")?.label).toBeUndefined();
+    // 自动存档的主题是内部编号，不当标签用
+    const auto = idx.snapshots.find((s) => s.kind === "auto");
+    expect(auto?.label).toBeUndefined();
+    expect(auto?.chapter).toBe("001");
+  });
+
+  it("存一版后删掉索引再重建，标签原样回来", async () => {
+    const { exec } = makeGit();
+    const r = await milestoneSnapshot(exec, { root, label: "第三章 雪停了", totalWords: 900, deltaWords: 120 });
+    expect(r.ok).toBe(true);
+
+    // 抹掉索引缓存（等价于换机器 clone 后 .novelpad/version 不存在）
+    fs.rmSync(indexPath(root), { force: true });
+    expect(loadIndex(root).snapshots).toEqual([]);
+
+    const idx = await rebuildIndex(exec, root);
+    expect(idx.snapshots).toHaveLength(1);
+    expect(idx.snapshots[0].label).toBe("第三章 雪停了");
+    expect(idx.snapshots[0].kind).toBe("milestone");
   });
 });

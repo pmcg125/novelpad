@@ -300,5 +300,119 @@ function makeLayout() {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+/* ============================================================
+ * 6. 托管闭环：备份真的把稿子**和时间线**推上去，另一台机器取回
+ * ============================================================ */
+
+{
+  /*
+   * 这一节守的是「作者以为备份好了，其实没有」。四个曾经真实存在的洞：
+   *
+   *   1. push 不带 refspec → 某些 push.default 下 exit 0 却什么都没推。
+   *   2. 版本只挂在 refs/novelpad/auto（不在任何分支上）→ git push 永远带不走。
+   *   3. 主干只收本次改动的文件 → 云端缺章节。
+   *   4. 里程碑 ref 不推、fetch 配置也没有 → 换机器 clone 下来正文全在、
+   *      时间线一片空白，而且作者完全看不出来。
+   *
+   * 仓库根 == 作品根、分支名固定 main：让主干断言与机器上的
+   * init.defaultBranch 无关。
+   */
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "np-e2e-host-"));
+  const root = path.join(tmp, "book");
+  const bare = path.join(tmp, "cloud.git");
+  fs.mkdirSync(path.join(root, "chapters"), { recursive: true });
+  git(tmp, "init", "--bare", "-q", "-b", "main", bare);
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.email", "t@t.t");
+  git(root, "config", "user.name", "t");
+  git(root, "config", "commit.gpgsign", "false");
+  git(root, "remote", "add", "origin", bare);
+
+  fs.writeFileSync(path.join(root, "chapters", "001.md"), "# 第一章 夜航\n\n海很黑。\n");
+  await ensureRepo(nodeExec, root);
+
+  // —— 作者从没点过「存一版」，直接点「备份到云端」
+  const sync1 = await core.syncTrunk(nodeExec, root);
+  check("没存过版也能建出主干（否则第一次备份推不出任何东西）", sync1.ok === true && !sync1.skipped, JSON.stringify(sync1));
+
+  const push1 = await core.push(nodeExec, { root });
+  check("第一次备份成功", push1.ok === true, push1.error ?? "");
+
+  const cloud1 = git(bare, "ls-tree", "-r", "--name-only", "main");
+  check("云端 main 有第一章", cloud1.includes("chapters/001.md"), cloud1);
+  check("云端不含本地版本缓存", !cloud1.includes(".novelpad/version/"), cloud1);
+
+  // —— 存一版 + 再备份
+  fs.writeFileSync(path.join(root, "chapters", "002.md"), "# 第二章 渡口\n\n雾很大。\n");
+  const ms = await milestoneSnapshot(nodeExec, {
+    root,
+    label: "第二章 渡口",
+    note: "伏笔埋在这",
+    totalWords: 24,
+    deltaWords: 12,
+  });
+  check("存一版成功", ms.ok === true && !ms.trunkSkipped, JSON.stringify(ms));
+  check("主干跟着里程碑前进", git(root, "rev-parse", "refs/heads/main") === ms.record?.commit, git(root, "rev-parse", "refs/heads/main"));
+
+  // 只提交到磁盘、没进版本的改动：syncTrunk 负责带上
+  fs.writeFileSync(path.join(root, "chapters", "003.md"), "# 第三章 雪\n\n天很冷。\n");
+  const trunkBefore = git(root, "rev-parse", "refs/heads/main");
+  const sync2 = await core.syncTrunk(nodeExec, root);
+  check(
+    "备份前同步把新章节带上主干",
+    sync2.ok === true && sync2.commit !== trunkBefore,
+    JSON.stringify({ sync2, trunkBefore }),
+  );
+
+  const push2 = await core.push(nodeExec, { root });
+  check("第二次备份成功", push2.ok === true, push2.error ?? "");
+
+  const cloud2 = git(bare, "ls-tree", "-r", "--name-only", "main");
+  check("云端有全部三章（主干不是只收本次文件）", ["001", "002", "003"].every((n) => cloud2.includes(`chapters/${n}.md`)), cloud2);
+
+  const cloudRefs = git(bare, "for-each-ref", "--format=%(refname)").split("\n").filter(Boolean);
+  check("云端带了里程碑 ref", cloudRefs.some((r) => r.startsWith("refs/novelpad/milestone/")), JSON.stringify(cloudRefs));
+  check("云端不堆自动存档 ref", !cloudRefs.some((r) => r.includes("/auto/")), JSON.stringify(cloudRefs));
+  check("云端分支列表干净（只有 main）", git(bare, "for-each-ref", "refs/heads").split("\n").filter(Boolean).length === 1);
+
+  // 主干被推进过，作者的工作区不能看起来像「稿子全删了」
+  const status = git(root, "status", "--porcelain");
+  check("推进主干后 git status 不把稿子显示成已删除", !/^ ?D/.test(status), status);
+
+  // —— 另一台机器
+  const other = path.join(tmp, "other-machine");
+  git(tmp, "clone", "-q", bare, other);
+  git(other, "config", "core.autocrlf", "false");
+  check("clone 本身拿不到里程碑 ref（必须走取回）", git(other, "for-each-ref", "refs/novelpad") === "");
+
+  const pulled = await core.pull(nodeExec, other);
+  check("新机器取回成功", pulled.ok === true, pulled.error ?? "");
+  const gotRefs = git(other, "for-each-ref", "--format=%(refname)", "refs/novelpad");
+  check("取回之后本地有里程碑 ref", gotRefs.includes("refs/novelpad/milestone/"), gotRefs);
+  check("取回真的把 fetch 配置补上了（否则时间线永远取不回来）", git(other, "config", "--get-all", "remote.origin.fetch").includes("refs/novelpad/milestone/"));
+
+  const filled = await core.backfillFromRefs(nodeExec, other);
+  check("新机器时间线补回条目", filled.added >= 1, JSON.stringify(filled));
+  const labeled = filled.index.snapshots.find((s) => s.kind === "milestone");
+  check("补回的条目带作者写的标签", labeled?.label === "第二章 渡口", JSON.stringify(labeled));
+
+  const otherFiles = git(other, "ls-tree", "-r", "--name-only", "HEAD");
+  check("新机器的稿子齐全", ["001", "002", "003"].every((n) => otherFiles.includes(`chapters/${n}.md`)), otherFiles);
+
+  // —— 状态栏：什么时候该催作者备份
+  const clean = await core.pushPreview(nodeExec, other);
+  check("取回之后 ahead=0（不再显示待备份）", clean.ahead === 0 && clean.hasUpstream, JSON.stringify(clean));
+
+  fs.writeFileSync(path.join(other, "chapters", "004.md"), "# 第四章 归\n\n路很长。\n");
+  const dirtyOnly = await core.pushPreview(nodeExec, other);
+  check("只写到磁盘时 dirty 为真（改动还不在提交里）", dirtyOnly.dirty === true, JSON.stringify(dirtyOnly));
+
+  await core.syncTrunk(nodeExec, other);
+  const aheadNow = await core.pushPreview(nodeExec, other);
+  check("同步之后状态栏显示有待备份", aheadNow.ahead >= 1, JSON.stringify(aheadNow));
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
 process.exitCode = fail === 0 ? 0 : 1;

@@ -87,6 +87,7 @@ export async function upstreamOf(exec: ExecFn, root: string, branch: string): Pr
 export interface PushInput {
   root: string;
   remote?: string;
+  /** 省略或 "HEAD" = 推当前分支（内部会解析成分支名并显式拼 refspec） */
   branch?: string;
   /** 单次命令用的凭据，不落盘 */
   token?: string;
@@ -142,20 +143,94 @@ export function explainPushError(stderr: string): string {
 }
 
 /**
+ * 除分支之外还要推的 ref。
+ *
+ * 为什么不能只推分支：时间线的记录住在 `refs/novelpad/{milestone,publish}/…`，
+ * 而索引 `.novelpad/version/snapshots.json` 是**故意不进 git 的**（本地缓存，
+ * 每个 worktree 各一份，跟踪它会让两个窗口互相覆盖）。只推分支的话，
+ * 换台机器 clone 下来正文全在、时间线一片空白——「昨晚那版」找不回来。
+ * rebuildIndex 正是靠这些 ref 重建索引的，推了它们才算备份了时间线。
+ *
+ * 不推 `refs/novelpad/auto/`：那是按章滚动的短期缓存（每章只留 20 个），
+ * 推上去会在仓库里堆几百条作者看不懂的 ref，而且它随时可重建，不是要保的东西。
+ *
+ * 通配 refspec 在没有匹配时**静默跳过**（实测 exit 0），所以「从没存过版」
+ * 不会让这次推送报错。这些 ref 不在 `refs/heads/` 下，GitHub 的分支列表
+ * 也不会多出条目来。
+ */
+const TRUNK_REF_SPECS = ["refs/novelpad/milestone/*", "refs/novelpad/publish/*"].flatMap((r) => [`${r}:${r}`]);
+
+/** 与 TRUNK_REF_SPECS 对应的拉取映射；落到本地同名 ref，rebuildIndex 才扫得到 */
+const EXTRA_FETCH_REF_SPECS = ["refs/novelpad/milestone", "refs/novelpad/publish"].flatMap((r) => [
+  `+${r}/*:${r}/*`,
+]);
+
+/**
+ * 让 `git fetch` / 「从云端取回」真的能把时间线带下来。
+ *
+ * 关键一步：clone 和普通 fetch 默认只取 `refs/heads/*`。我们把里程碑 ref
+ * 推上去了，却不改 fetch 配置的话，那些 ref 在新机器上永远取不到——
+ * 等于写一份没人能读的备份，比不推更糟（作者会以为已经备份好了）。
+ *
+ * 写进 `.git/config` 的 `remote.<name>.fetch`。这不违反「凭据不落盘」：
+ * refspec 不是密钥，而且 `.git/config` 本身不会被提交或推送。
+ * 幂等：已有同名条目就不再加，重复调用不会让配置越堆越长。
+ */
+export async function ensureHostingFetch(
+  exec: ExecFn,
+  root: string,
+  remote = "origin",
+): Promise<{ ok: boolean; added: number; error?: string }> {
+  const cur = await exec(["config", "--get-all", `remote.${remote}.fetch`], { cwd: root });
+  const have = new Set(cur.code === 0 ? cur.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : []);
+  if (!have.size) {
+    return { ok: false, added: 0, error: `找不到远端 ${remote}` };
+  }
+  const missing = EXTRA_FETCH_REF_SPECS.filter((s) => !have.has(s));
+  if (!missing.length) return { ok: true, added: 0 };
+
+  for (const spec of missing) {
+    const r = await exec(["config", "--add", `remote.${remote}.fetch`, spec], { cwd: root });
+    if (r.code !== 0) return { ok: false, added: 0, error: r.stderr.trim() || "写入拉取配置失败" };
+  }
+  return { ok: true, added: missing.length };
+}
+
+/**
  * 推一条分支上去。
  *
- * 用 `-u` 建立上游：作者下次点「同步」就不必再指定分支。
+ * **必须显式给出 refspec。** 不带 refspec 时 git 按 `push.default`
+ * 决定推什么，而分支还没有上游时它会直接报错：
+ *
+ *     fatal: The current branch main has no upstream branch.
+ *
+ * 也就是说作者第一次点「备份」必然失败；而在某些 push.default 配置下
+ * 它返回 **exit 0 却什么都没推**——那更糟，界面显示"已备份"，云端是空的。
+ *
+ * 所以这里先把 HEAD 解析成分支名，再拼 `<分支>:<分支>`。
  * 凭据走 `GIT_ASKPASS` 而不是 URL 里嵌 token——后者会被写进
  * `.git/config`，然后随下一次推送一起泄露。
  */
 export async function push(exec: ExecFn, input: PushInput): Promise<PushOutput> {
   const remote = input.remote ?? "origin";
-  const branch = input.branch ?? "HEAD";
+
+  // 分支名：调用方给就用，给的是 "HEAD" 或没给就解析当前分支
+  let branch = input.branch && input.branch !== "HEAD" ? input.branch : undefined;
+  if (!branch) {
+    const cur = await exec(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: input.root });
+    branch = cur.code === 0 ? cur.stdout.trim() : "";
+  }
+  // 未出生分支（一个字没存过就点备份）：git 会说一句看不懂的
+  // "src refspec does not match any"，这里直接说人话。
+  if (!branch) {
+    return { ok: false, error: "这部作品还没有存过档，没有内容可备份。先写点什么，或点一次「存一版」。" };
+  }
 
   const args = ["push"];
+  // 上游只跟着分支建，所以 `-u` 必须待在主 refspec 那一组里；
+  // 里程碑 / 发布版是额外带上去的历史，不参与上游跟踪，单独一组。
   if (input.setUpstream !== false) args.push("-u");
-  args.push(remote);
-  if (branch !== "HEAD") args.push(branch);
+  args.push(remote, `${branch}:${branch}`, ...TRUNK_REF_SPECS);
 
   const env: Record<string, string> = {};
   if (input.token) {
@@ -311,9 +386,18 @@ export async function pushPreview(exec: ExecFn, root: string): Promise<PushPrevi
 /**
  * 拉取远端更新。
  *
- * 只用 `--ff-only`：作者的工作区里可能有正在写的段落，
- * 一次真正的 merge 会在他的文件里插进冲突标记——他那时的
- * 第一反应是「我的稿子坏了」。快进失败就如实说「需要手动处理」。
+ * **不用 `git pull`。** pull 一旦带显式 refspec（我们为了把里程碑 ref
+ * 一起取回来必须带），git 会说 `Cannot fast-forward to multiple branches`
+ * 并且不动 HEAD——实测如此，界面显示失败但云端内容其实取到了一半。
+ * 所以拆成 fetch + merge，两件事各自可控：
+ *
+ *   - `fetch` 按 `.git/config` 的 refspec 取，包含里程碑 / 发布版，
+ *     时间线这才跟着稿子一起回来了。
+ *   - `merge --ff-only <remote>/<branch>` 只在能快进时动工作区。
+ *
+ * 只用快进：作者的工作区里可能有正在写的段落，一次真正的 merge 会在
+ * 他的文件里插进冲突标记——他那时的第一反应是「我的稿子坏了」。
+ * 快进失败就如实说「需要手动处理」，绝不自己合。
  */
 export async function pull(
   exec: ExecFn,
@@ -327,21 +411,49 @@ export async function pull(
     env.NOVELPAD_GIT_TOKEN = opts.token;
     env.NOVELPAD_GIT_USER = opts.username ?? "x-access-token";
   }
+  const remote = opts.remote ?? "origin";
 
-  const before = await exec(["rev-parse", "HEAD"], { cwd: root });
-  const args = ["pull", "--ff-only"];
-  if (opts.remote) args.push(opts.remote);
-  if (opts.branch) args.push(opts.branch);
+  // 取回时间线 ref 的前提。失败不拦：老仓库没这条配置也能只同步正文。
+  await ensureHostingFetch(exec, root, remote);
 
-  const r = await exec(args, { cwd: root, timeoutMs: 180_000, env });
-  if (r.code !== 0) {
-    const s = r.stderr.toLowerCase();
-    if (/not possible to fast-forward|diverged/.test(s)) {
-      return { ok: false, updated: false, error: "云端和你本地都有对方没有的改动。这种时候不能自动合，避免把你正在写的稿子搅乱。" };
-    }
-    return { ok: false, updated: false, error: explainPushError(r.stderr) };
+  const fetched = await exec(["fetch", remote], { cwd: root, timeoutMs: 180_000, env });
+  if (fetched.code !== 0) {
+    return { ok: false, updated: false, error: explainPushError(fetched.stderr || fetched.stdout) };
   }
 
-  const after = await exec(["rev-parse", "HEAD"], { cwd: root });
+  // 目标分支：调用方给了就用，没给取当前分支
+  let branch = opts.branch;
+  if (!branch) {
+    const cur = await exec(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root });
+    branch = cur.code === 0 ? cur.stdout.trim() : "";
+  }
+  if (!branch) {
+    return { ok: false, updated: false, error: "这部作品当前不在任何分支上，没法取回。" };
+  }
+
+  // 远端还没有这条分支（第一次取回、或那边只推过别的分支）
+  const remoteTip = await exec(["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`], { cwd: root });
+  if (remoteTip.code !== 0) {
+    return { ok: false, updated: false, error: "云端还没有这部作品的内容，或者那个仓库里没有这条分支。" };
+  }
+
+  const before = await exec(["rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root });
+  const merge = await exec(["merge", "--ff-only", `refs/remotes/${remote}/${branch}`], {
+    cwd: root,
+    timeoutMs: 60_000,
+    env,
+  });
+  if (merge.code !== 0) {
+    const s = merge.stderr.toLowerCase();
+    if (/not possible to fast-forward|diverged|come from nowhere/.test(s)) {
+      return { ok: false, updated: false, error: "云端和你本地都有对方没有的改动。这种时候不能自动合，避免把你正在写的稿子搅乱。" };
+    }
+    if (/local changes would be overwritten|uncommitted changes/.test(s)) {
+      return { ok: false, updated: false, error: "你有还没存进版本库的改动，先点一次「存一版」再取回。" };
+    }
+    return { ok: false, updated: false, error: explainPushError(merge.stderr || merge.stdout) };
+  }
+
+  const after = await exec(["rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root });
   return { ok: true, updated: before.stdout.trim() !== after.stdout.trim() };
 }

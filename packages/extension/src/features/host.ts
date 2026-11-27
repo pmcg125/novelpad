@@ -23,6 +23,7 @@ import * as vscode from "vscode";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  backfillFromRefs,
   ensureRepo,
   listRemotes,
   nodeExec,
@@ -31,6 +32,7 @@ import {
   pushPreview,
   repoLayout,
   setRemote,
+  syncTrunk,
   type PushPreview,
   type RemoteInfo,
 } from "@novelpad/core";
@@ -293,6 +295,34 @@ async function pushWithCred(
   const root = store.root?.fsPath;
   if (!root) return { ok: false, error: "请先打开一个作品" };
   const remote = vscode.workspace.getConfiguration("novelpad").get<string>("host.remote", "origin");
+
+  /*
+   * 推之前先把主干同步到此刻的稿子。
+   *
+   * 这一步不能省：自动存档挂在 `refs/novelpad/auto/…`，**不在任何分支上**，
+   * `git push` 永远不会带走它们。少了这次同步，作者写完三小时直接点备份，
+   * 推上去的是上次「存一版」时的内容，而界面会告诉他"已备份"。
+   *
+   * 顺序也是有意为之：先 flush 待落盘的编辑（saveNow），再同步主干，
+   * 最后推。反过来会把「编辑器里改了但还没存档」的内容算进主干，
+   * 那与作者看到的时间线不一致。
+   */
+  await vscode.commands.executeCommand("novelpad.version.saveNow");
+  let trunkSkipped: string | undefined;
+  try {
+    await ensureRepo(nodeExec, root);
+    const sync = await syncTrunk(nodeExec, root);
+    if (!sync.ok) {
+      // 同步失败不等于不能推：主干维持在上次的位置，推它仍然有意义
+      // （至少里程碑不丢）。所以这里记下原因，继续推。
+      trunkSkipped = sync.error ?? sync.skipped;
+    } else if (sync.skipped) {
+      trunkSkipped = sync.skipped;
+    }
+  } catch (e) {
+    trunkSkipped = e instanceof Error ? e.message : String(e);
+  }
+
   const r = await push(nodeExec, {
     root,
     remote,
@@ -303,7 +333,10 @@ async function pushWithCred(
     username: cred?.username || undefined,
     setUpstream: true,
   });
-  return { ok: r.ok, error: r.error, url: r.url };
+  if (!r.ok) return { ok: false, error: r.error, url: r.url };
+  // 推成功了但最近的内容没进主干——必须说，否则作者以为已经备份好了
+  if (trunkSkipped) return { ok: false, error: `云端只到上一版：${trunkSkipped}`, url: r.url };
+  return { ok: true, url: r.url };
 }
 
 /** 「备份到云端」：没配远端就引导去连接；有内容才推 */
@@ -320,9 +353,7 @@ export async function backup(store: ProjectStore, secrets: vscode.SecretStorage)
   const cred = await resolveCredential(secrets, { interactive: true });
   if (!cred) return { ok: false, message: "没有可用的 GitHub 凭据" };
 
-  // 先把待落盘的改动存一版，否则推上去的是「上次保存时」的内容
-  await vscode.commands.executeCommand("novelpad.version.saveNow");
-
+  // 存档与主干同步都在 pushWithCred 里做（所有推送路径共用一套顺序）
   const r = await pushWithCred(store, cred);
   if (!r.ok) return { ok: false, message: r.error ?? "推送失败" };
   return { ok: true, message: "已备份到云端" };
@@ -343,10 +374,28 @@ export async function restore(store: ProjectStore, secrets: vscode.SecretStorage
   });
   if (!r.ok) return { ok: false, message: r.error ?? "取回失败" };
 
-  if (!r.updated) return { ok: true, message: "云端没有新的东西" };
+  /*
+   * 取回之后把云端新来的版本补进时间线。
+   *
+   * 这一步必须**在判断 updated 之前**做：新机器 clone 完第一次点取回时，
+   * 正文往往已经是最新的（clone 拿到了分支），`updated` 是 false，
+   * 但里程碑 ref 是这次 fetch 才回来的——提前返回的话，时间线在
+   * 最需要它的那台机器上永远是空的。
+   *
+   * 用 backfillFromRefs 而不是 rebuildIndex：后者会把已有记录的标签、
+   * 备注、字数、AI 来源一起冲掉（那些信息 ref 名里推不出来）。
+   */
+  const { added } = await backfillFromRefs(nodeExec, root);
+
+  if (!r.updated && !added) return { ok: true, message: "云端没有新的东西" };
 
   await store.refresh();
-  return { ok: true, message: "已取回云端的改动" };
+  return {
+    ok: true,
+    message: added
+      ? `已取回云端的改动，时间线补回 ${added} 版`
+      : "已取回云端的改动",
+  };
 }
 
 /* ============================================================
