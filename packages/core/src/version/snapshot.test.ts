@@ -16,6 +16,7 @@ import {
   overview,
   rebuildIndex,
   removeRecords,
+  pruneAutoSnapshots,
   saveIndex,
   saveSession,
   sessionPath,
@@ -43,6 +44,8 @@ function makeGit(over: { dirty?: boolean } = {}) {
     const bad = (s = "boom"): ExecResult => ({ code: 1, stdout: "", stderr: s });
 
     if (cmd === "add") return ok();
+    // 临时索引从空树开始：桩里只需确认命令被调用过
+    if (cmd === "read-tree") return ok();
     if (cmd === "write-tree") {
       if (!current.dirty) return ok(current.tree);
       current.seq++;
@@ -51,6 +54,9 @@ function makeGit(over: { dirty?: boolean } = {}) {
     }
     if (cmd === "rev-parse") {
       const spec = args[args.length - 1];
+      // 作品根 = 仓库根：--show-toplevel 给仓库根，--show-prefix 给空
+      if (spec === "--show-toplevel") return ok("/repo\n");
+      if (spec === "--show-prefix") return ok("\n");
       if (spec.startsWith("HEAD")) return bad();
       if (spec.endsWith("^{tree}")) {
         const id = spec.replace(/\^\{tree\}$/, "");
@@ -184,6 +190,84 @@ describe("makeRecord / appendRecord / removeRecords", () => {
     appendRecord(root, makeRecord({ kind: "auto", commit: "c2", ref: "r2", at: new Date(), files: [] }));
     removeRecords(root, ["r1"]);
     expect(loadIndex(root).snapshots.map((s) => s.ref)).toEqual(["r2"]);
+  });
+});
+
+describe("pruneAutoSnapshots", () => {
+  /** 造一个只回答 for-each-ref / update-ref -d 的执行器 */
+  function makeRefsExec(initial: string[]) {
+    const live = new Set(initial);
+    const exec: ExecFn = async (args) => {
+      if (args[0] === "for-each-ref") {
+        const prefix = args[args.length - 1] ?? "";
+        const list = [...live]
+          .filter((r) => r.startsWith(prefix))
+          // 让顺序确定：名称倒序 = 新的在前
+          .sort((a, b) => (a < b ? 1 : -1));
+        return {
+          code: 0,
+          stdout: list.map((r) => `${r}\u001f${"c-" + r}\u001f2026-11-27T10:00:00+08:00`).join("\n"),
+          stderr: "",
+        };
+      }
+      if (args[0] === "update-ref" && args[1] === "-d") {
+        live.delete(args[2]);
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    return { exec, live };
+  }
+
+  it("删旧 ref 的同时同步索引，不留死记录", async () => {
+    const r = "refs/novelpad/auto/001/";
+    const refs = [`${r}2026112710000000`, `${r}2026112710010000`, `${r}2026112710020000`];
+    for (const ref of refs) {
+      appendRecord(root, makeRecord({ kind: "auto", commit: "c-" + ref, ref, at: new Date(), files: [], chapter: "001" }));
+    }
+
+    const { exec, live } = makeRefsExec(refs);
+    const removed = await pruneAutoSnapshots(exec, root, "001", 1);
+
+    expect(removed).toBe(2);
+    expect(live.size).toBe(1);
+    // 索引只剩存活的那条 —— 否则时间线会显示点不进去的记录
+    const idx = loadIndex(root);
+    expect(idx.snapshots.map((s) => s.ref)).toEqual([...live]);
+  });
+
+  it("未超上限时不动", async () => {
+    const r = "refs/novelpad/auto/002/";
+    const refs = [`${r}2026112710000000`, `${r}2026112710010000`];
+    for (const ref of refs) {
+      appendRecord(root, makeRecord({ kind: "auto", commit: "c-" + ref, ref, at: new Date(), files: [], chapter: "002" }));
+    }
+    const { exec, live } = makeRefsExec(refs);
+    expect(await pruneAutoSnapshots(exec, root, "002", 5)).toBe(0);
+    expect(live.size).toBe(2);
+    expect(loadIndex(root).snapshots).toHaveLength(2);
+  });
+
+  it("只清理指定章节，别的章节与里程碑不受影响", async () => {
+    const a = "refs/novelpad/auto/003/";
+    const b = "refs/novelpad/auto/004/";
+    const refs = [`${a}2026112710000000`, `${a}2026112710010000`, `${b}2026112710000000`];
+    for (const ref of refs) {
+      appendRecord(root, makeRecord({ kind: "auto", commit: "c-" + ref, ref, at: new Date(), files: [], chapter: ref.includes("/003/") ? "003" : "004" }));
+    }
+    appendRecord(root, makeRecord({ kind: "milestone", commit: "m1", ref: "refs/novelpad/milestone/m1", at: new Date(), files: [] }));
+
+    const { exec, live } = makeRefsExec(refs);
+    expect(await pruneAutoSnapshots(exec, root, "003", 1)).toBe(1);
+
+    expect(live.has(`${b}2026112710000000`)).toBe(true);
+    expect(loadIndex(root).snapshots.some((s) => s.kind === "milestone")).toBe(true);
+  });
+
+  it("keep < 1 时不动作（防止误删全部）", async () => {
+    const { exec, live } = makeRefsExec(["refs/novelpad/auto/005/x"]);
+    expect(await pruneAutoSnapshots(exec, root, "005", 0)).toBe(0);
+    expect(live.size).toBe(1);
   });
 });
 

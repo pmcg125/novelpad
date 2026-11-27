@@ -11,6 +11,10 @@
  *   每个快照独立 ref，滚动就只是 `update-ref -d`，被删的提交变不可达，交给 git 回收。
  */
 import { execFile } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { repoLayout, toRepoPath } from "./layout.js";
 
 /* ============================================================
  * 命令执行（可注入）
@@ -22,15 +26,24 @@ export interface ExecResult {
   stderr: string;
 }
 
-export type ExecFn = (args: readonly string[], opts: { cwd: string; timeoutMs?: number }) => Promise<ExecResult>;
+export type ExecFn = (
+  args: readonly string[],
+  opts: { cwd: string; timeoutMs?: number; env?: Record<string, string> },
+) => Promise<ExecResult>;
 
 /** 默认实现：execFile，带超时，永不抛异常（错误放进返回值） */
-export const nodeExec: ExecFn = (args, { cwd, timeoutMs = 20_000 }) =>
+export const nodeExec: ExecFn = (args, { cwd, timeoutMs = 20_000, env }) =>
   new Promise((resolve) => {
-    execFile("git", args as string[], { cwd, timeout: timeoutMs, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const code = err && typeof (err as { code?: number }).code === "number" ? (err as { code: number }).code : err ? 1 : 0;
-      resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
+    const fullEnv = env ? { ...process.env, ...env } : process.env;
+    execFile(
+      "git",
+      args as string[],
+      { cwd, timeout: timeoutMs, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: fullEnv },
+      (err, stdout, stderr) => {
+        const code = err && typeof (err as { code?: number }).code === "number" ? (err as { code: number }).code : err ? 1 : 0;
+        resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
   });
 
 /* ============================================================
@@ -153,17 +166,55 @@ export interface SnapshotResult {
  * 作者的分支历史保持干净；我们只在自己管理的 ref 上挂提交。
  */
 export async function createSnapshot(exec: ExecFn, root: string, input: SnapshotInput): Promise<SnapshotResult> {
-  const paths = input.paths && input.paths.length ? input.paths : ["."];
+  const paths = input.paths && input.paths.length ? [...input.paths] : ["."];
 
-  // 1) 暂存（-A 让删除也被记录）
-  const add = await exec(["add", "-A", "--", ...paths], { cwd: root });
-  if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "git add 失败" };
+  // 用**临时索引**暂存，不用作者的真实索引。三个理由：
+  //
+  // 1. 范围正确：`write-tree` 写出的是整个索引。作品位于仓库子目录时，
+  //    真实索引里可能已有仓库其他文件，快照会把它们一起带走
+  //    （端到端测试踩到过：快照里凭空多了仓库根的 unrelated.txt）。
+  // 2. 不污染作者：往真实索引 `git add` 会改变他的 `git status`，
+  //    甚至把半成品塞进他准备提交的内容里。工具不该动用户的暂存区。
+  // 3. 可并发：临时索引是独立文件，不会和用户或其他窗口抢 index.lock。
+  //
+  // `read-tree --empty` 从空树开始，所以快照只含本次 add 进来的路径。
+  const tmpIndex = path.join(
+    os.tmpdir(),
+    `novelpad-index-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  const env = { GIT_INDEX_FILE: tmpIndex };
+  const cleanup = () => {
+    try {
+      fs.rmSync(tmpIndex, { force: true });
+    } catch {
+      /* 清理失败不影响结果 */
+    }
+  };
 
-  // 2) 写出树对象
-  const tree = await exec(["write-tree"], { cwd: root });
-  if (tree.code !== 0) return { ok: false, error: tree.stderr.trim() || "git write-tree 失败" };
-  const treeId = tree.stdout.trim();
+  try {
+    // 1) 空索引 → 暂存（-A 让删除也被记录）
+    const reset = await exec(["read-tree", "--empty"], { cwd: root, env });
+    if (reset.code !== 0) return { ok: false, error: reset.stderr.trim() || "git read-tree 失败" };
 
+    const add = await exec(["add", "-A", "--", ...paths], { cwd: root, env });
+    if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "git add 失败" };
+
+    // 2) 写出树对象
+    const tree = await exec(["write-tree"], { cwd: root, env });
+    if (tree.code !== 0) return { ok: false, error: tree.stderr.trim() || "git write-tree 失败" };
+    return finishSnapshot(exec, root, input, tree.stdout.trim());
+  } finally {
+    cleanup();
+  }
+}
+
+/** 造提交对象并挂 ref（与暂存无关的后半段） */
+async function finishSnapshot(
+  exec: ExecFn,
+  root: string,
+  input: SnapshotInput,
+  treeId: string,
+): Promise<SnapshotResult> {
   // 3) 父提交
   let parent: string | undefined;
   if (input.parent !== "none") {
@@ -262,6 +313,27 @@ export async function readFileAt(exec: ExecFn, root: string, commit: string, pat
   const r = await exec(["show", `${commit}:${path}`], { cwd: root, timeoutMs: 30_000 });
   if (r.code !== 0) return undefined;
   return r.stdout;
+}
+
+/**
+ * 从提交里读文件，路径相对**作品根**。
+ *
+ * `<rev>:<path>` 里的 path **永远相对提交树根**，与 cwd 无关。
+ * 作品位于仓库子目录时，必须补上仓库前缀才能命中。
+ * （与 `createSnapshot` 的 pathspec 相反——那条是相对 cwd，不能再补。）
+ *
+ * 补错的后果是静默的：git 返回非零，这里返回 undefined，
+ * 界面于是显示「两版没有差异」——看起来正常，结果是错的。
+ */
+export async function readProjectFileAt(
+  exec: ExecFn,
+  root: string,
+  commit: string,
+  relFromProject: string,
+): Promise<string | undefined> {
+  const layout = await repoLayout(exec, root);
+  const rel = layout ? toRepoPath(layout, relFromProject) : relFromProject;
+  return readFileAt(exec, root, commit, rel);
 }
 
 /** 某提交改动了哪些文件（相对仓库根） */

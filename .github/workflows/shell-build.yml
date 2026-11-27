@@ -245,3 +245,13 @@ jobs:
       # 字形覆盖：分片缺字只会静默回退成宋体，必须在 CI 里拦住
       - name: 检查字形覆盖
         run: node shell/scripts/check-font-coverage.mjs packages/extension/media/fonts .
+
+      # 版本管理端到端：真实 git，不 mock。
+      # 三个静默缺陷只能这样测出来：子目录路径前缀、快照范围越界、污染作者索引。
+      - name: 准备依赖（core dist）
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm --filter @novelpad/core build
+      - name: 版本管理端到端
+        run: node shell/scripts/e2e-version.mjs

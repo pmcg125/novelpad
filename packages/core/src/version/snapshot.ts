@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExecFn } from "./repo.js";
-import { AUTO_REF_PREFIX, autoRefs, autoRefName, createSnapshot, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readFileAt, refExists } from "./repo.js";
+import { AUTO_KEEP_PER_CHAPTER, AUTO_REF_PREFIX, autoRefs, autoRefName, createSnapshot, deleteRef, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readProjectFileAt, refExists, sanitizeRefComponent } from "./repo.js";
 
 /* ============================================================
  * 类型
@@ -175,6 +175,35 @@ export function removeRecords(root: string, refs: readonly string[]): SnapshotIn
   idx.snapshots = idx.snapshots.filter((s) => !drop.has(s.ref));
   saveIndex(root, idx);
   return idx;
+}
+
+/**
+ * 滚动清理：删旧 ref **并同步索引**。
+ *
+ * 两件事必须一起做。只删 ref 会在索引里留下死记录——时间线照样显示，
+ * 点进去取不到内容；只删索引则会留下孤儿 ref，`git gc` 收不走。
+ * 这两个模块分成两个文件，所以这里显式把它们配成一对。
+ *
+ * 返回实际清掉的条数。
+ */
+export async function pruneAutoSnapshots(
+  exec: ExecFn,
+  root: string,
+  chapterKey: string,
+  keep = AUTO_KEEP_PER_CHAPTER,
+): Promise<number> {
+  if (keep < 1) return 0;
+  const prefix = `${AUTO_REF_PREFIX}${sanitizeRefComponent(chapterKey)}/`;
+  const refs = await listRefs(exec, root, prefix);
+  if (refs.length <= keep) return 0;
+
+  const doomed = refs.slice(keep);
+  const gone: string[] = [];
+  for (const r of doomed) {
+    if (await deleteRef(exec, root, r.name)) gone.push(r.name);
+  }
+  if (gone.length) removeRecords(root, gone);
+  return gone.length;
 }
 
 /* ============================================================
@@ -409,7 +438,7 @@ export async function milestoneSnapshot(
   return { ok: true, record: rec, empty: res.empty };
 }
 
-/** 读回某快照中的正文（用于 diff 与预览） */
+/** 读回某快照中的正文（用于 diff 与预览）；路径相对作品根 */
 export async function readSnapshotFile(exec: ExecFn, root: string, rec: SnapshotRecord, relPath: string): Promise<string | undefined> {
-  return readFileAt(exec, root, rec.commit, relPath);
+  return readProjectFileAt(exec, root, rec.commit, relPath);
 }

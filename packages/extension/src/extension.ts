@@ -9,9 +9,11 @@ import { Linter } from "./features/linter";
 import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
 import { registerFocusMode } from "./features/focus";
+import { VersionManager } from "./features/version";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
+import { openTimeline, refreshTimeline } from "./views/timeline";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -41,6 +43,35 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("novelpad.graph.chain", () => openGraph(store, "chain")),
   );
   store.onDidChange(() => refreshGraph());
+
+  // 版本管理：自动存档 + 时间线
+  const version = new VersionManager(store);
+  version.start();
+  context.subscriptions.push(
+    version,
+    vscode.commands.registerCommand("novelpad.timeline", () => openTimeline(store)),
+    vscode.commands.registerCommand("novelpad.version.milestone", async () => {
+      if (!store.root) return void vscode.window.showWarningMessage("请先打开一个作品");
+      const label = await vscode.window.showInputBox({
+        prompt: "这一版叫什么？（比如「第三章改完雨夜对峙」）",
+        placeHolder: "里程碑名称",
+        validateInput: (v) => (v.trim() ? undefined : "写个名字，以后好找"),
+      });
+      if (!label) return;
+      const note = await vscode.window.showInputBox({ prompt: "备注（可留空）", placeHolder: "这版改了什么" });
+      const rec = await version.milestone(label.trim(), note?.trim() || undefined);
+      if (rec) {
+        void vscode.window.showInformationMessage(`已存一版：${rec.label}`);
+        refreshTimeline();
+      }
+    }),
+    vscode.commands.registerCommand("novelpad.version.saveNow", async () => {
+      await version.flush("manual");
+      refreshTimeline();
+      void vscode.window.showInformationMessage("已存档");
+    }),
+  );
+  store.onDidChange(() => refreshTimeline());
 
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

@@ -7,6 +7,7 @@
  *   annotate.ts  批注锚定与四级退让
  */
 export * from "./repo.js";
+export * from "./layout.js";
 export * from "./snapshot.js";
 export * from "./diff.js";
 export * from "./annotate.js";

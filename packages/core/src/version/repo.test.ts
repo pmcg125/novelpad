@@ -81,6 +81,12 @@ function makeFakeGit(over: Partial<FakeState> = {}) {
       return st.repoExists ? ok("/repo\n") : bad("not a git repository");
     }
 
+    // 作品根 = 仓库根：前缀为空
+    if (cmd === "rev-parse" && args[1] === "--show-prefix") return ok("\n");
+
+    // 临时索引从空树开始（createSnapshot 用它避免污染作者真实索引）
+    if (cmd === "read-tree") return ok();
+
     if (cmd === "rev-parse") {
       const spec = args[args.length - 1] ?? "";
       if (spec.endsWith("^{tree}")) {
@@ -273,6 +279,33 @@ describe("createSnapshot", () => {
     const exec: ExecFn = async (args) => (args[0] === "add" ? { code: 1, stdout: "", stderr: "index locked" } : { code: 0, stdout: "", stderr: "" });
     const r = await createSnapshot(exec, "/repo", { message: "m" });
     expect(r).toEqual({ ok: false, error: "index locked" });
+  });
+
+  // 回归：曾经直接用作者的索引 `git add`，会污染他的暂存区，
+  // 且 write-tree 写出整个索引 —— 作品在仓库子目录时会把无关文件带进快照。
+  // 现在必须走临时索引（GIT_INDEX_FILE），且以空树为起点。
+  it("用临时索引，不碰作者的真实暂存区", async () => {
+    const seen: { cmd: string; env?: Record<string, string> }[] = [];
+    const exec: ExecFn = async (args, o) => {
+      seen.push({ cmd: args[0] ?? "", env: o.env });
+      if (args[0] === "write-tree") return { code: 0, stdout: "tree-x\n", stderr: "" };
+      if (args[0] === "rev-parse") return { code: 1, stdout: "", stderr: "" };
+      if (args[0] === "commit-tree") return { code: 0, stdout: "c1\n", stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const r = await createSnapshot(exec, "/repo", { message: "m", parent: "none" });
+    expect(r.ok).toBe(true);
+
+    const staged = seen.filter((s) => ["read-tree", "add", "write-tree"].includes(s.cmd));
+    expect(staged.map((s) => s.cmd)).toEqual(["read-tree", "add", "write-tree"]);
+    for (const s of staged) {
+      expect(s.env?.GIT_INDEX_FILE, `${s.cmd} 缺少 GIT_INDEX_FILE`).toBeTruthy();
+      // 必须是同一个临时索引，否则 read-tree 空的与 add 的不是同一个
+      expect(s.env?.GIT_INDEX_FILE).toBe(staged[0].env?.GIT_INDEX_FILE);
+    }
+    // 空树起点：否则子目录作品会把仓库其余文件一起写进快照
+    expect(seen.find((s) => s.cmd === "read-tree")).toBeTruthy();
   });
 });
 

@@ -196,6 +196,23 @@
         "command": "novelpad.focusMode",
         "title": "NovelPad: 专注模式",
         "category": "NovelPad"
+      },
+      {
+        "command": "novelpad.timeline",
+        "title": "NovelPad: 时间线（改稿历史）",
+        "category": "NovelPad",
+        "icon": "$(history)"
+      },
+      {
+        "command": "novelpad.version.milestone",
+        "title": "NovelPad: 存一版（里程碑）",
+        "category": "NovelPad",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "novelpad.version.saveNow",
+        "title": "NovelPad: 立即存档",
+        "category": "NovelPad"
       }
     ],
     "menus": {
@@ -239,6 +256,16 @@
           "command": "novelpad.graph.chain",
           "when": "view == novelpad.graph",
           "group": "navigation@2"
+        },
+        {
+          "command": "novelpad.timeline",
+          "when": "view == novelpad.chapters || view == novelpad.entities",
+          "group": "navigation@4"
+        },
+        {
+          "command": "novelpad.version.milestone",
+          "when": "view == novelpad.chapters",
+          "group": "1_export@3"
         }
       ],
       "view/item/context": [
