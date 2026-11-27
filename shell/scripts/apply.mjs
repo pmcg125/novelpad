@@ -22,6 +22,11 @@ if (!fs.existsSync(path.join(upstream, "package.json"))) {
 
 const log = (s) => console.log(`[apply] ${s}`);
 
+/* ---------- 0. 图标：每次构建都重新生成，保证品牌图形可复现 ----------
+   生成的 PNG 是逐像素算出来的，不含时间戳，所以同一版本源码产出同一份字节。 */
+execFileSync(process.execPath, [path.join(here, "gen-icons.mjs")], { stdio: "pipe" });
+log("品牌图标已生成（win32 / linux / darwin）");
+
 /* 深度合并：对象递归合并，数组/标量由 overlay 直接替换 */
 const merge = (base, over) => {
   if (Array.isArray(over) || over === null || typeof over !== "object") return over;

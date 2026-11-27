@@ -1,0 +1,41 @@
+diff --git a/build/gulpfile.vscode.js b/build/gulpfile.vscode.js
+index 857114f..e1a331e 100644
+--- a/build/gulpfile.vscode.js
++++ b/build/gulpfile.vscode.js
+@@ -405,11 +405,11 @@ function patchWin32DependenciesTask(destinationFolderName) {
+ 			await rcedit(path.join(cwd, dep), {
+ 				'file-version': baseVersion,
+ 				'version-string': {
+-					'CompanyName': 'Microsoft Corporation',
++					'CompanyName': 'NovelPad',
+ 					'FileDescription': product.nameLong,
+ 					'FileVersion': packageJson.version,
+ 					'InternalName': basename,
+-					'LegalCopyright': 'Copyright (C) 2022 Microsoft. All rights reserved',
++					'LegalCopyright': 'Copyright (C) 2026 NovelPad contributors. VS Code portions (C) Microsoft Corporation. MIT.',
+ 					'OriginalFilename': basename,
+ 					'ProductName': product.nameLong,
+ 					'ProductVersion': packageJson.version,
+diff --git a/build/lib/electron.js b/build/lib/electron.js
+index df6473c..d6b56ca 100644
+--- a/build/lib/electron.js
++++ b/build/lib/electron.js
+@@ -86,13 +86,13 @@ exports.config = {
+     version: electronVersion,
+     tag: product.electronRepository ? `v${electronVersion}-${msBuildId}` : undefined,
+     productAppName: product.nameLong,
+-    companyName: 'Microsoft Corporation',
+-    copyright: 'Copyright (C) 2023 Microsoft. All rights reserved',
++    companyName: 'NovelPad',
++    copyright: 'Copyright (C) 2026 NovelPad contributors. VS Code portions (C) Microsoft Corporation. MIT.',
+     darwinIcon: 'resources/darwin/code.icns',
+     darwinBundleIdentifier: product.darwinBundleIdentifier,
+-    darwinApplicationCategoryType: 'public.app-category.developer-tools',
+-    darwinHelpBookFolder: 'VS Code HelpBook',
+-    darwinHelpBookName: 'VS Code HelpBook',
++    darwinApplicationCategoryType: 'public.app-category.productivity',
++    darwinHelpBookFolder: 'NovelPad HelpBook',
++    darwinHelpBookName: 'NovelPad HelpBook',
+     darwinBundleDocumentTypes: [
+         ...darwinBundleDocumentTypes({ 'C header file': 'h', 'C source code': 'c' }, 'c'),
+         ...darwinBundleDocumentTypes({ 'Git configuration file': ['gitattributes', 'gitconfig', 'gitignore'] }, 'config'),

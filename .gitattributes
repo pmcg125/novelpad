@@ -2,8 +2,21 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# 二进制资产：一旦被当作文本做行尾规范化，字节就会坏
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.webp binary
+*.ico binary
+*.icns binary
+*.bmp binary
+*.woff2 binary
+*.woff binary
+*.ttf binary
+*.otf binary
 *.vsix binary
 *.onnx binary
+
+# 补丁必须逐字节交给 git apply：CRLF 会让 apply --3way 上下文匹配失败
+*.patch text eol=lf

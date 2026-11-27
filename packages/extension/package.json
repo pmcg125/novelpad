@@ -191,6 +191,11 @@
       {
         "command": "novelpad.graph.chain",
         "title": "NovelPad: 打开剧情发展链"
+      },
+      {
+        "command": "novelpad.focusMode",
+        "title": "NovelPad: 专注模式",
+        "category": "NovelPad"
       }
     ],
     "menus": {
@@ -265,6 +270,66 @@
           "when": "false"
         }
       ]
+    },
+    "configurationDefaults": {
+      "editor.fontFamily": "'LXGW WenKai Screen', 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', serif",
+      "editor.fontSize": 19,
+      "editor.lineHeight": 2,
+      "editor.letterSpacing": 0.4,
+      "editor.lineNumbers": "off",
+      "editor.minimap.enabled": false,
+      "editor.folding": false,
+      "editor.renderLineHighlight": "none",
+      "editor.glyphMargin": false,
+      "editor.cursorSurroundingLines": 6,
+      "editor.wordWrap": "on",
+      "editor.wrappingIndent": "none",
+      "editor.quickSuggestions": {
+        "other": "off",
+        "comments": "off",
+        "strings": "off"
+      },
+      "editor.occurrencesHighlight": "off",
+      "editor.selectionHighlight": false,
+      "editor.renderWhitespace": "none",
+      "editor.scrollbar.verticalScrollbarSize": 10,
+      "editor.scrollbar.horizontalScrollbarSize": 10,
+      "workbench.startupEditor": "none",
+      "workbench.editor.showTabs": "single",
+      "workbench.editor.tabSizing": "shrink",
+      "workbench.tree.indent": 14,
+      "workbench.list.smoothScrolling": true,
+      "window.commandCenter": false,
+      "window.title": "${activeEditorShort} · NovelPad",
+      "breadcrumbs.enabled": false,
+      "explorer.compactFolders": false,
+      "files.eol": "\n",
+      "files.trimTrailingWhitespace": false,
+      "files.insertFinalNewline": true,
+
+      "zenMode.hideActivityBar": true,
+      "zenMode.hideStatusBar": true,
+      "zenMode.showTabs": "none",
+      "zenMode.centerLayout": true,
+      "zenMode.fullScreen": false,
+      "zenMode.silentNotifications": true,
+      "zenMode.restore": false,
+
+      "markdown.preview.fontFamily": "'LXGW WenKai Screen', 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', serif",
+      "markdown.preview.fontSize": 19,
+      "markdown.preview.lineHeight": 2,
+      "markdown.preview.breaks": true,
+
+      "[markdown]": {
+        "editor.quickSuggestions": {
+          "other": "off",
+          "comments": "off",
+          "strings": "off"
+        },
+        "editor.wordWrap": "on",
+        "editor.tabSize": 2,
+        "editor.defaultFormatter": null
+      }
     },
     "configuration": {
       "title": "NovelPad",
@@ -408,7 +473,16 @@
         "key": "alt+shift+\\",
         "mac": "alt+shift+\\",
         "when": "editorLangId == markdown && editorTextFocus"
+      },
+      {
+        "command": "novelpad.focusMode",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f",
+        "when": "editorTextFocus"
       }
+    ],
+    "markdown.previewStyles": [
+      "./media/markdown-preview.css"
     ],
     "themes": [
       {

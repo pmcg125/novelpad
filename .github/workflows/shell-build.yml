@@ -222,3 +222,19 @@ jobs:
           path: upstream
           fetch-depth: 1
       - run: node shell/scripts/apply.mjs upstream
+
+      # 皮肤校验：选择器是否真实存在（上游改版第一道报警）
+      - name: 检查皮肤选择器
+        run: node shell/scripts/check-css.mjs upstream packages/extension/media/workbench.css packages/extension/media/markdown-preview.css
+
+      # configurationDefaults 校验：拼写错误 / 作用域不允许都会被静默丢弃，必须机器验
+      - name: 检查 configurationDefaults
+        run: node shell/scripts/verify-defaults.mjs upstream packages/extension
+
+      # 字体随包完整性
+      - name: 检查字体分片
+        run: node shell/scripts/check-fonts.mjs packages/extension/media/fonts
+
+      # 字形覆盖：分片缺字只会静默回退成宋体，必须在 CI 里拦住
+      - name: 检查字形覆盖
+        run: node shell/scripts/check-font-coverage.mjs packages/extension/media/fonts .

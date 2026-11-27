@@ -18,10 +18,43 @@
 | 自绘图标（活动栏、树视图） | ✅ 完全 | 我们贡献的 `svg` 资源 |
 | 元素的**增删**（标题栏加字数、侧栏加页脚） | ⚠️ 间接 | 状态栏项 / 视图 `viewsWelcome` / 自绘 webview；真增删要 patch |
 | 活动栏宽度（48px）、标题栏高度（35px）、状态栏高度 | ❌ | 是 TS 里的 layout 常量，改就得 patch |
-| 内核菜单项（终端 / 调试 / 源控制） | ❌ 配置级不可 | 只能 `window.menuBarVisibility: hidden` 整体隐藏 |
+| 内核菜单项（终端 / 调试 / 源控制） | ❌ 配置级不可 | 菜单整体隐藏要改源码（见下） |
 
 **决策**：布局常量一个都不改。为 4px 宽度去维护一个 TS 补丁不划算，且会随上游 layout 重构而碎。
 视觉差异靠**留白、分割线、字体、色彩**做出来——这也是 `DESIGN.md` 的原则（工具退后）。
+
+### 1.1 菜单栏：为什么必须打一个补丁
+
+`window.menuBarVisibility` 的 scope 是 **`ConfigurationScope.APPLICATION`**
+（`src/vs/workbench/browser/workbench.contribution.ts:673`）。
+
+而扩展的 `configurationDefaults` 只接受四类 scope：
+
+```ts
+// src/vs/workbench/api/common/configurationExtensionPoint.ts
+const allowedScopes = [
+  ConfigurationScope.MACHINE_OVERRIDABLE,
+  ConfigurationScope.WINDOW,
+  ConfigurationScope.RESOURCE,
+  ConfigurationScope.LANGUAGE_OVERRIDABLE,
+];
+// 不在其中的键会被静默丢弃，只留一条 warning
+delete overrides[key];
+```
+
+所以**扩展永远设不了它**。唯一的替代是让用户手工改 `settings.json`——写作工具的用户不会干这事。
+
+结论：打一个一行的 `default` 补丁（`shell/patches/001-menubar-toggle.patch`），
+把默认值从 `classic` 改成 **`toggle`**：
+
+- `hidden` 太狠——「文件 / 编辑 / 格式」完全没有入口，而小说作者需要「导出」这类菜单；
+- `toggle` 默认不可见，**按一次 Alt 就出来**，正是我们要的「工具退后，但不消失」。
+
+不能用 `workbench.action.toggleMenuBar` 之类的运行时命令代替：
+那是「切换」，用户重启后回到默认值，治不了默认态。
+
+同理，**活动栏可见性**不要用 `workbench.activityBar.visible`：
+该键在 1.85.0 已 deprecated 并迁移到 `workbench.activityBar.location`。
 
 ---
 
@@ -129,24 +162,51 @@ VS Code 的 Markdown 编辑器是等宽代码编辑器，直接用来写小说�
   "editor.folding": false,
   "editor.renderLineHighlight": "none",
   "editor.glyphMargin": false,
-  "editor.cursorSurroundingLines": 6,        // 打字机滚动
+  "editor.cursorSurroundingLines": 6,        // 打字机滚动（专注模式之外也保留）
   "editor.wordWrap": "on",
   "editor.wrappingIndent": "none",
   "editor.quickSuggestions": { "other": false, "comments": false, "strings": false },
   "workbench.startupEditor": "none",
-  "workbench.activityBar.location": "default",
   "workbench.editor.showTabs": "single",
   "workbench.editor.tabSizing": "shrink",
   "workbench.tree.indent": 14,
-  "window.menuBarVisibility": "hidden",
   "window.commandCenter": false,
   "window.title": "${activeEditorShort} · NovelPad",
   "breadcrumbs.enabled": false,
-  "explorer.compactFolders": false
+  "explorer.compactFolders": false,
+
+  // 专注模式 = 预设好的 Zen（见 §5.3）
+  "zenMode.hideActivityBar": true,
+  "zenMode.hideStatusBar": true,
+  "zenMode.showTabs": "none",
+  "zenMode.centerLayout": true,
+  "zenMode.fullScreen": false,
+  "zenMode.silentNotifications": true,
+  "zenMode.restore": false,
+
+  // Markdown 预览（webview，皮肤 CSS 进不去，只能靠设置）
+  "markdown.preview.fontFamily": "'LXGW WenKai Screen', ... serif",
+  "markdown.preview.fontSize": 19,
+  "markdown.preview.lineHeight": 2,
+  "markdown.preview.breaks": true
 }
 ```
 
 只对 Markdown 生效的项用语言级覆盖：`"[markdown]": { ... }`。
+
+**`window.menuBarVisibility` 不在这份清单里**：它的 scope 是 `APPLICATION`，
+扩展贡献会被静默丢弃，只能走壳补丁（见 §1.1）。
+同理不要写 `workbench.activityBar.visible`（1.85.0 已废弃并迁移到
+`workbench.activityBar.location`，且它是布局偏好，不该被 IDE 写进稿件仓库）。
+
+**必跑的自检**：
+
+```bash
+node shell/scripts/verify-defaults.mjs <upstream 源码根> packages/extension
+```
+
+它会逐个核对「上游是否注册过这个键」与「scope 是否在允许的四类里」。
+拼错一个字母不会报错，只会静默失效——这个脚本就是唯一的保险。
 
 ### 5.2 装饰级（P1，需实测 1.85 DOM）
 
@@ -164,7 +224,35 @@ VS Code 的 Markdown 编辑器是等宽代码编辑器，直接用来写小说�
 
 ### 5.3 专注模式
 
-命令 `novelpad.focusMode`：`workbench.action.toggleZenMode` + 记录/恢复布局 + `cursorSurroundingLines` 提到 12 + 渲染 36em 栏宽（`workbench.action.toggleCenteredLayout`）。
+**决策：专注模式 = 预设好的 Zen Mode，不自己写一套平行实现。**
+
+早期方案往 `.vscode/settings.json` 写 `workbench.activityBar.visible` /
+`workbench.statusBar.visible` / `workbench.editor.showTabs`，再记账还原。三个问题：
+
+1. `workbench.activityBar.visible` 在 1.85.0 **已废弃**，被 `registerConfigurationMigrations`
+   迁移成 `workbench.activityBar.location`，写了也不一定生效；
+2. 它会把 IDE 的布局偏好写进作者的稿件仓库——稿件目录里不该出现 IDE 配置；
+3. 需要记账 + 还原 + 兜底，任何一条路径漏了用户设置就被永久改掉。
+
+上游 Zen Mode 自带 `zenMode.hideActivityBar / hideStatusBar / showTabs /
+centerLayout / fullScreen / silentNotifications / restore` 七个开关，
+全部可以用 `configurationDefaults` 预设（见 §5.1），且状态由上游用 UI State 管理。
+
+于是扩展侧只剩一行：
+
+```ts
+export async function toggleFocusMode() {
+  await vscode.commands.executeCommand("workbench.action.toggleZenMode");
+}
+```
+
+- 快捷键 `ctrl+alt+f` / `cmd+alt+f`（不占用上游的 `ctrl+k z`）；`Esc` 两次也能退出。
+- 上游只有 `toggleZenMode` 与 `exitZenMode`，**没有** `enterZenMode`——别凭直觉调。
+- 扩展读不到 context key（`inZenMode`），因此无法「监听 Zen 退出」。
+  这正是不要记账的理由：无状态就没有竞态。
+- 打字机滚动不做成「进入时临时改值再还原」，而是写作场景的**常开默认值**
+  （`editor.cursorSurroundingLines: 6`）——不进专注模式也想留住上文的视线余量。
+
 不做自研编辑器——Monaco 的输入法、撤销栈、多光标是花了十年打磨的，重写一遍不现实。
 
 > 自研「稿纸编辑器」（ProseMirror）只在 M9+ 作为**可选沉浸模式**评估，不进主线。

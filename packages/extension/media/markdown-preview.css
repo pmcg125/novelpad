@@ -1,0 +1,223 @@
+/* ============================================================
+   NovelPad · Markdown 预览排版
+   ------------------------------------------------------------
+   预览跑在 webview 里，工作台皮肤（workbench.css）到不了这里，
+   所以单独贡献：package.json 的 contributes["markdown.previewStyles"]。
+
+   预览根节点结构（1.85.0，documentRenderer.renderBody）：
+     <body class="vscode-body">
+       <div class="markdown-body" dir="auto"> ... </div>
+
+   与 workbench.css 一样只吃 --vscode-*，不写死色值。
+
+   字号 / 行高 / 字体族**故意不写在这里**，而是走 package.json 的
+   configurationDefaults（markdown.preview.fontFamily / fontSize / lineHeight）。
+   原因：上游 markdown.css 用 var(--markdown-font-size) 起效，而这些变量
+   来自用户设置；若这里再写死一个 font-size，同特异性下会看注入顺序分胜负，
+   用户改设置反而可能不生效。设置项是唯一真源。
+   ============================================================ */
+
+/* ---------- 页面 ---------- */
+
+html,
+body {
+  letter-spacing: 0.02em;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+body {
+  /* 稿纸栏宽：36–40 汉字/行，居中；留白给滚动条与视线 */
+  padding: 2.4em 0 30vh;
+}
+
+/* 上游用 26px 的左右内边距贴边；这里收到居中限宽容器里 */
+.markdown-body {
+  max-width: 40em;
+  margin: 0 auto;
+  padding: 0 1.6em;
+}
+
+/* ---------- 标题 ---------- */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+ol,
+ul,
+pre {
+  margin-top: 0;
+}
+
+h1 {
+  font-family: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  margin: 2em 0 0.8em;
+}
+
+h2 {
+  font-family: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  margin: 1.8em 0 0.6em;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  font-weight: 600;
+  margin: 1.4em 0 0.5em;
+}
+
+/* ---------- 正文段落 ---------- */
+
+p {
+  margin: 0 0 1.2em;
+  /* 段首缩进：屏幕排版里用 CSS，源文件不存空格 */
+  text-indent: 2em;
+}
+
+/* 列表、引用里的段落不缩进（缩进会破坏列表对齐） */
+li p,
+blockquote p,
+td p,
+th p {
+  text-indent: 0;
+}
+
+blockquote {
+  border-left: 2px solid var(--vscode-focusBorder);
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  margin: 1.2em 0;
+  padding: 0.2em 0 0.2em 1em;
+}
+
+/* 场景分隔（*** / ---）在预览里变成留白节奏，不是一条灰线 */
+hr {
+  border: 0;
+  height: 1.6em;
+  margin: 0;
+}
+
+/* ---------- 强调与链接 ---------- */
+
+a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-textLink-foreground) 30%, transparent);
+}
+
+a:hover {
+  color: var(--vscode-textLink-activeForeground);
+  border-bottom-color: currentColor;
+}
+
+/* ---------- 代码 ---------- */
+
+code,
+pre {
+  /* 代码块保持等宽，不跟着正文用楷体 */
+  font-family: var(--vscode-editor-font-family, ui-monospace, "Cascadia Code", Consolas, monospace);
+  font-size: 0.86em;
+  line-height: 1.7;
+  text-indent: 0;
+  letter-spacing: 0;
+}
+
+code {
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+pre {
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 6px;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+}
+
+/* ---------- 表格 ---------- */
+
+table {
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  /* 表格里字距收一点，中文表头不至于散开 */
+  letter-spacing: 0;
+  font-size: 0.92em;
+}
+
+th,
+td {
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, currentColor));
+  padding: 0.4em 0.8em;
+  text-indent: 0;
+}
+
+th {
+  background: var(--vscode-textBlockQuote-background);
+  font-weight: 600;
+}
+
+/* ---------- 图片 ---------- */
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 配图居中，图注用小字（图注写作 `*图注*`，上游会渲染成 em） */
+p:has(> img) {
+  text-align: center;
+  text-indent: 0;
+}
+
+p:has(> img) em {
+  display: block;
+  margin-top: 0.4em;
+  font-size: 13px;
+  font-style: normal;
+  color: var(--vscode-descriptionForeground);
+  letter-spacing: 0.04em;
+}
+
+/* ---------- 作者备注（HTML 注释）----------
+   预览里默认不可见，这里让它在预览中也隐藏得干净；
+   在编辑器里由装饰类型显示为淡色（见 src/editor/decorations.ts）。
+   ------------------------------------------------------------ */
+
+/* ---------- 高对比度：让路 ----------
+   webview 里的主题类是 .vscode-high-contrast（见 themeing.ts 的 ApiThemeClassName），
+   挂在 body 上，不是 .monaco-workbench。
+   ------------------------------------------------------------ */
+
+.vscode-high-contrast p,
+.vscode-high-contrast-light p {
+  text-indent: 0;
+}
+
+.vscode-high-contrast hr,
+.vscode-high-contrast-light hr {
+  border-top: 1px solid var(--vscode-contrastBorder);
+  height: 0;
+  margin: 1.6em 0;
+}

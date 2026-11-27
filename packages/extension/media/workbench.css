@@ -1,0 +1,320 @@
+/* ------------------------------------------------------------
+   0. 字体：霞鹜文楷 Screen（随包，GB 子集 97 片 / 4.33MB）
+   font-src 'self' 已覆盖，与上游 codicon 同一机制。
+   font-display: swap —— 首屏不等字体，冷启动不卡。
+   ------------------------------------------------------------ */
+@import url("./fonts/lxgw-wenkai-screen-gb.css");
+
+/* ============================================================
+   NovelPad · 工作台皮肤（L3）
+   ------------------------------------------------------------
+   这份文件只在壳里加载（见 workbench.html 的 <link>）；
+   标准 VS Code 里 404，静默失效——同一份扩展，两种外观。
+
+   两条硬规矩：
+   1. 只用主题变量 var(--vscode-*) 和字号/间距，不写死色值。
+      色值一律由 packages/theme 的令牌产出，改色不动这里。
+   2. 不堆 !important。上游选择器普遍是
+      `.monaco-workbench .part.xxx ...` 四级起步，
+      我们统一用 :is(.novelpad) 前缀把特异性抬到同等或更高。
+
+   布局常量（活动栏 48px / 标题栏 35px / 状态栏高度）一个都不改——
+   见 docs/PLAN-UI.md §1 的决策记录。
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1. 全局基调
+   ------------------------------------------------------------ */
+
+:is(body.novelpad) {
+  /* UI 字体优先本地鸿蒙黑体；不可分发，只做优先匹配 */
+  --novelpad-font-ui: "HarmonyOS Sans SC", "HarmonyOS Sans", system-ui, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --novelpad-font-kai: "LXGW WenKai Screen", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", serif;
+  --novelpad-font-serif: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+
+  /* 比上游 13px 略收一点字距，中文界面更透气 */
+  --novelpad-letter: 0.01em;
+  /* 面板圆角与弹层阴影，和 mockup 对齐 */
+  --novelpad-radius: 6px;
+  --novelpad-radius-lg: 10px;
+  --novelpad-shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.12);
+  /* 细分割线：比 1px 实线更退后 */
+  --novelpad-hairline: 1px solid var(--vscode-sideBar-border, rgba(128, 128, 128, 0.16));
+}
+
+/* UI 字体：只落在「文字」上，不动图标字体（codicon 必须保留） */
+:is(.novelpad) .monaco-workbench,
+:is(.novelpad) .monaco-workbench .part,
+:is(.novelpad) .monaco-workbench .monaco-list,
+:is(.novelpad) .monaco-workbench .monaco-inputbox,
+:is(.novelpad) .monaco-workbench .monaco-button,
+:is(.novelpad) .monaco-workbench .monaco-menu {
+  font-family: var(--novelpad-font-ui);
+  letter-spacing: var(--novelpad-letter);
+}
+
+/* 减少动态效果：尊重系统设置（上游已有部分，这里补齐我们自己的动效） */
+@media (prefers-reduced-motion: reduce) {
+  :is(.novelpad) *,
+  :is(.novelpad) *::before,
+  :is(.novelpad) *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ------------------------------------------------------------
+   2. 活动栏（#1）
+   48px 不动。图标 22px、选中态左侧 2px 青条、底部留白。
+   上游：.monaco-workbench .activitybar > .content > .composite-bar
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench .activitybar .action-label {
+  font-size: 22px;
+  /* 图标本身是 codicon 字体，别被 UI 字体覆盖 */
+  font-family: inherit;
+}
+
+/* 选中项：左侧青条。上游 activeBorder 只画在外层，这里加到条目上更贴视线 */
+:is(.novelpad) .monaco-workbench .activitybar .action-item.checked::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 22px;
+  border-radius: 0 1px 1px 0;
+  background: var(--vscode-activityBar-activeBorder, var(--vscode-focusBorder));
+}
+
+:is(.novelpad) .monaco-workbench .activitybar .action-item {
+  position: relative;
+  transition: background-color 120ms ease-out;
+}
+
+/* 底部留白：让最后几个图标不贴着状态栏 */
+:is(.novelpad) .monaco-workbench .activitybar > .content > .composite-bar {
+  padding-bottom: 12px;
+}
+
+/* ------------------------------------------------------------
+   3. 侧栏（#2）
+   标题去全大写、加字距；分组头 1px 下划。
+   上游：.monaco-workbench .part.sidebar > .title > .title-label h2
+   注意：上游对标题用了 text-transform: uppercase, 中文没有大小写，
+   那条对中文界面无效——真正起作用的是字号/字重/颜色。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench .part.sidebar > .title > .title-label h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-descriptionForeground));
+}
+
+:is(.novelpad) .monaco-workbench .part.sidebar .title-actions .action-label {
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 120ms ease-out;
+}
+
+/* 分组头（章节 / 设定 / 图谱）*/
+:is(.novelpad) .monaco-workbench .viewlet .collapsible.header .title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-descriptionForeground));
+  border-bottom: var(--novelpad-hairline);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+/* 树视图行：行高与内边距，中文不挤在一起 */
+:is(.novelpad) .monaco-workbench .customview-tree .monaco-list .monaco-list-row {
+  line-height: 1.6;
+}
+
+:is(.novelpad) .monaco-workbench .customview-tree .monaco-list-row .custom-view-tree-node-item {
+  padding-left: 2px;
+}
+
+/* 章节树激活项：左侧 2px 青条（Design §5.1）*/
+:is(.novelpad) .monaco-workbench .customview-tree .monaco-list .monaco-list-row.selected {
+  box-shadow: inset 2px 0 0 0 var(--vscode-focusBorder);
+}
+
+/* ------------------------------------------------------------
+   4. 标签页（#4）
+   去圆角去阴影，激活页签顶部 2px 青线，未激活降低不透明度。
+   上游：.monaco-workbench .part.editor > .content .editor-group-container
+        > .title .tabs-container > .tab
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:is(.novelpad)
+  .monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .title
+  .tabs-container
+  > .tab:not(.active):not(.dragged-over) {
+  opacity: 0.72;
+  transition: opacity 120ms ease-out;
+}
+
+:is(.novelpad)
+  .monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .title
+  .tabs-container
+  > .tab:not(.active):hover {
+  opacity: 1;
+}
+
+/* 激活页签顶部青线：用上游现成的 border 容器，不自己画 */
+:is(.novelpad)
+  .monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .title
+  .tabs-container
+  > .tab.active.tab-border-top
+  > .tab-border-top-container {
+  background-color: var(--vscode-tab-activeBorderTop, var(--vscode-focusBorder));
+  height: 2px;
+}
+
+/* 单页签模式（showTabs: single）的标题文字稍大一点，像稿纸题头 */
+:is(.novelpad) .monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container > .title-label {
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------
+   5. 状态栏（#5）
+   高度不动；12px、tabular-nums 让字数不跳动。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench .part.statusbar {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+:is(.novelpad) .monaco-workbench .part.statusbar > .items-container > .statusbar-item > .statusbar-item-label {
+  padding: 0 6px;
+}
+
+/* ------------------------------------------------------------
+   6. 输入框 / 面板（#6）
+   圆角 6px、1px 边框；focus 只换边框色，不加外发光。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench .monaco-inputbox {
+  border-radius: var(--novelpad-radius);
+}
+
+:is(.novelpad) .monaco-workbench .monaco-inputbox.synthetic-focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: none;
+}
+
+:is(.novelpad) .monaco-workbench .monaco-button {
+  border-radius: var(--novelpad-radius);
+}
+
+/* 面板（底部输出 / 终端区）标题栏 */
+:is(.novelpad) .monaco-workbench .part.panel > .title {
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------
+   7. 滚动条（#7）
+   宽度由配置给出（configurationDefaults 的 editor.scrollbar.*Size），
+   这里只管圆角与过渡——不跟上游的 inline 尺寸打架。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 5px;
+  transition: background-color 120ms ease-out;
+}
+
+/* ------------------------------------------------------------
+   8. 通知 / 弹层（#8）
+   圆角 10px、柔和投影。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .monaco-workbench > .notifications-toasts .notification-toast-container > .notification-toast {
+  border-radius: var(--novelpad-radius-lg);
+  box-shadow: var(--novelpad-shadow-pop);
+}
+
+:is(.novelpad) .monaco-workbench .monaco-dialog-box {
+  border-radius: var(--novelpad-radius-lg);
+  box-shadow: var(--novelpad-shadow-pop);
+}
+
+/* ------------------------------------------------------------
+   9. 命令面板（#9）
+   居中偏上、限宽 640px、结果行高 26px。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) .quick-input-widget {
+  top: 12vh;
+  max-width: 640px;
+  border-radius: var(--novelpad-radius-lg);
+  box-shadow: var(--novelpad-shadow-pop);
+}
+
+:is(.novelpad) .quick-input-widget .quick-input-list .quick-input-list-entry {
+  line-height: 26px;
+}
+
+/* 命令面板内的分组标题也收一下字距 */
+:is(.novelpad) .quick-input-list .quick-input-list-separator {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ------------------------------------------------------------
+   10. Markdown 预览 → 见 media/markdown-preview.css
+   预览跑在 webview 里，工作台的 CSS 到不了那儿，
+   改由 contributes["markdown.previewStyles"] 注入。
+   ------------------------------------------------------------ */
+
+/* ------------------------------------------------------------
+   11. 编辑器本体（#1 纸感）
+   主题给了底色；当前行高亮、折叠控件、行号栏的显示与否
+   全部由 configurationDefaults 的设置控制（editor.renderLineHighlight /
+   editor.folding / editor.lineNumbers / editor.glyphMargin）。
+   这里不写 CSS——上游实际类名是 .current-line 与 .codicon-folding-*，
+   且折叠图标本就是 opacity:0 悬停才现，重复覆盖只会增加维护面。
+   ------------------------------------------------------------ */
+
+/* ------------------------------------------------------------
+   12. 高对比度主题下主动让路
+   我们的透明层与自定义边框在 HC 下会破坏可读性，全部退回上游。
+   注意 .hc-black / .hc-light 挂在 .monaco-workbench 上，不在 body。
+   ------------------------------------------------------------ */
+
+:is(.novelpad) :is(.hc-black, .hc-light) {
+  --novelpad-shadow-pop: none;
+  --novelpad-hairline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+/* 高对比度下不要我们的左侧青条与顶部青线，上游对比色更重要 */
+:is(.novelpad) :is(.hc-black, .hc-light) .activitybar .action-item.checked::before {
+  display: none;
+}

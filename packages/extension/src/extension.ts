@@ -8,6 +8,7 @@ import { EntitiesProvider } from "./views/entities";
 import { Linter } from "./features/linter";
 import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
+import { registerFocusMode } from "./features/focus";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
@@ -25,6 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.createTreeView("novelpad.entities", { treeDataProvider: entities }),
     ...registerLanguageFeatures(store),
     ...registerCommands(store, linter, chapters, entities),
+    ...registerFocusMode(),
   );
 
   // Novel Copilot
