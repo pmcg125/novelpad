@@ -77,6 +77,10 @@ function makeGit(over: { dirty?: boolean } = {}) {
       else refs.set(args[1], args[2]);
       return ok();
     }
+    if (cmd === "show-ref") {
+      const ref = args[args.length - 1];
+      return refs.has(ref) ? ok() : bad("not found");
+    }
     if (cmd === "for-each-ref") {
       const prefix = args[args.length - 1];
       const names = [...refs.keys()].filter((r) => r.startsWith(prefix)).sort();
@@ -306,6 +310,39 @@ describe("autoSnapshot", () => {
     const r = await autoSnapshot(exec, { root, chapterKey: "001", files: [], totalWords: 10, deltaWords: 0 });
     expect(r.empty).toBe(true);
     expect(loadIndex(root).snapshots).toHaveLength(1);
+  });
+
+  // 回归：同一毫秒内连打两次（Linux 上文件操作够快，稳定触发）。
+  // 之前按 `ref !== 当前 ref` 筛上一版，撞名时会把唯一的参照提交筛掉，
+  // 去重失效 → 内容没变也存一版，CI 在 ubuntu 上红。
+  it("同一毫秒内第二次存档仍能正确去重", async () => {
+    const { exec, current } = makeGit();
+    const at = new Date(2026, 10, 27, 9, 0, 0, 123);
+    const a = await autoSnapshot(exec, { root, chapterKey: "002", files: [], totalWords: 10, deltaWords: 10, at });
+    expect(a.ok).toBe(true);
+    expect(a.empty).toBeUndefined();
+
+    // 内容未变：第二次必须判空
+    current.dirty = false;
+    const b = await autoSnapshot(exec, { root, chapterKey: "002", files: [], totalWords: 10, deltaWords: 0, at });
+    expect(b.empty).toBe(true);
+    expect(loadIndex(root).snapshots).toHaveLength(1);
+  });
+
+  // 同一毫秒但内容真的变了：ref 撞名要加序号，不能覆盖上一条。
+  // 覆盖会让索引里两条记录指向同一 ref，清理时删一个 ref 丢两次存档。
+  it("同一毫秒内容不同时不覆盖上一条 ref", async () => {
+    const { exec, current } = makeGit();
+    const at = new Date(2026, 10, 27, 9, 0, 0, 123);
+    await autoSnapshot(exec, { root, chapterKey: "004", files: [], totalWords: 10, deltaWords: 10, at });
+    current.dirty = true; // 内容变了，write-tree 会给新树
+    await autoSnapshot(exec, { root, chapterKey: "004", files: [], totalWords: 20, deltaWords: 10, at });
+
+    const snaps = loadIndex(root).snapshots;
+    expect(snaps).toHaveLength(2);
+    // 一个快照一个 ref：两条记录的 ref 必须不同
+    expect(new Set(snaps.map((s) => s.ref)).size).toBe(2);
+    expect([...current.refs.keys()]).toHaveLength(2);
   });
 
   it("AI 来源被记录，可用于后续筛选", async () => {

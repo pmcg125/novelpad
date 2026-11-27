@@ -38,18 +38,18 @@ jobs:
         env:
           PLATFORM: ${{ inputs.platform }}
         run: |
-          ALL='[
-            {"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},
-            {"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"},
-            {"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}
-          ]'
+          # 多行值写 $GITHUB_OUTPUT 必须用 heredoc（key<<EOF ... EOF），
+          # 直接用 echo 只有第一行带 key= 前缀，其余行会被判为 "Invalid format"。
+          # 这里先把 JSON 压成单行，双保险。
+          ALL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"},{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]'
           case "$PLATFORM" in
             win32|windows) SEL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]' ;;
             linux)         SEL='[{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"}]' ;;
             darwin|macos)  SEL='[{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]' ;;
             *)             SEL="$ALL" ;;
           esac
-          echo "matrix={\"include\":$SEL}" >> "$GITHUB_OUTPUT"
+          # 用 node 校验并序列化，避免手工拼串出一个坏 JSON 让后面的矩阵静默为空
+          echo "matrix=$(node -e 'process.stdout.write(JSON.stringify({include:JSON.parse(process.argv[1])}))' "$SEL")" >> "$GITHUB_OUTPUT"
 
   build-extension:
     runs-on: ubuntu-latest

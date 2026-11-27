@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExecFn } from "./repo.js";
-import { AUTO_REF_PREFIX, autoRefs, autoRefName, createSnapshot, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readFileAt } from "./repo.js";
+import { AUTO_REF_PREFIX, autoRefs, autoRefName, createSnapshot, listRefs, milestoneRefName, MILESTONE_REF_PREFIX, PUBLISH_REF_PREFIX, readFileAt, refExists } from "./repo.js";
 
 /* ============================================================
  * 类型
@@ -320,11 +320,32 @@ export interface AutoSnapshotOutput {
  */
 export async function autoSnapshot(exec: ExecFn, input: AutoSnapshotInput): Promise<AutoSnapshotOutput> {
   const at = input.at ?? new Date();
-  const ref = autoRefName(input.chapterKey, at);
-  // 同一章节上一版的内容：自动存档是独立根提交，没有父可比，显式拿它做去重
-  const prev = loadIndex(input.root)
-    .snapshots.filter((s) => s.kind === "auto" && s.chapter === input.chapterKey && s.ref !== ref)
-    .sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0))[0];
+  const idx = loadIndex(input.root);
+
+  // 同一章节上一版的内容：自动存档是独立根提交，没有父可比，显式拿它做去重。
+  //
+  // 不能按「ref 与本条不同」来筛掉刚写的记录：stamp 只到毫秒，同一毫秒内连打两次
+  // ref 必然相同，而那条正是要被覆盖的上一版。筛掉它就等于放弃去重，
+  // 「内容没变」会退化成「又存了一版」。Linux 上文件操作够快，两次调用稳定落在
+  // 同一毫秒，CI 会踩中；Windows 恰好跨了毫秒，本地就看不出来。
+  const prev = idx.snapshots
+    .filter((s) => s.kind === "auto" && s.chapter === input.chapterKey)
+    .sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : a.ref < b.ref ? 1 : -1))[0];
+
+  // 一个快照一个 ref。撞名（同一毫秒、内容又不同）就加序号：
+  // 否则 update-ref 会覆盖上一条，索引里留下两条指向同一 ref 的记录，
+  // 清理时删一个 ref 会连带丢掉两次存档。
+  //
+  // 序号从索引里的已知 ref 推，不循环探测 git：探测循环一旦遇上「什么都返回成功」
+  // 的执行器就永不退出（测试里的桩就是这样，vitest 直接被拖死）。
+  const base = autoRefName(input.chapterKey, at);
+  let ref = base;
+  const taken = new Set(idx.snapshots.map((s) => s.ref));
+  if (taken.has(ref) || (await refExists(exec, input.root, ref))) {
+    let n = 2;
+    while (taken.has(`${base}-${n}`)) n++;
+    ref = `${base}-${n}`;
+  }
   const res = await createSnapshot(exec, input.root, {
     message: `auto: ${input.chapterKey} ${at.toISOString()}`,
     paths: input.files.length ? input.files : undefined,

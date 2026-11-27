@@ -337,6 +337,15 @@ export async function deleteRef(exec: ExecFn, root: string, ref: string): Promis
   return r.code === 0;
 }
 
+/**
+ * ref 是否已存在。
+ * 用 `show-ref --verify`：不存在时退出码非 0，属于正常情况，不应当抛。
+ */
+export async function refExists(exec: ExecFn, root: string, ref: string): Promise<boolean> {
+  const r = await exec(["show-ref", "--verify", "--quiet", ref], { cwd: root });
+  return r.code === 0;
+}
+
 /** 全部自动存档（供时间线视图使用） */
 export function autoRefs(exec: ExecFn, root: string): Promise<RefInfo[]> {
   return listRefs(exec, root, AUTO_REF_PREFIX);
