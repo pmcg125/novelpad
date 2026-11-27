@@ -447,11 +447,26 @@ export async function applyMerge(
     return { ok: false, written: 0, error: `写入文件失败：${e instanceof Error ? e.message : String(e)}` };
   }
 
-  const paths = writable.map((d) => (input.prefix ? `${input.prefix}${d.file}` : d.file));
+  // 注意：这里的 `paths` **不能**补 prefix。
+  //
+  // `createSnapshot` 里的 `git add -A -- <paths>` 的 pathspec 相对 **cwd**
+  // （作品根），而 `prefix` 是「作品根相对仓库根」的前缀。补上去会变成
+  // `git add novel/chapters/003.md`，而 cwd 已经在 novel/ 里了 ——
+  // 该路径不存在，git 静默什么都不加，写出的树与 base 相同，
+  // 合并随后报 `empty: true`，作者以为合并成功、其实一个字都没进来。
+  //
+  // 只有 `readAt`（`git show <rev>:<path>`）需要仓库相对路径，那里已单独处理。
+  const writablePaths = writable.map((d) => d.file);
 
-  // 目标 ref 可能还不存在（第一次合并到一条新支线）。此时没有树可作基底，
-  // 只能从空树起步——那种情况下目标分支本来就是空的，不存在丢文件的问题。
+  // 目标 ref 可能还不存在（作者从没手工提交过，main 还是未出生的分支）。
+  // 这时没有树可以作基底，但**不能只写被合并的那几章**——
+  // 那样造出来的「第一版主稿」里只有一两章，其余章节和设定全部丢失。
+  //
+  // 这种情况的正确语义是：目标分支的第一版 = 此刻工作区的全部内容。
+  // 所以 paths 退化为 `.`（作品根下所有文件），并且因为 cwd 就是作品根，
+  // `git add -A -- .` 只会收作品内的文件，不会把仓库根的其他东西带进来。
   const baseExists = await refExists(exec, root, input.targetRef);
+  const paths = baseExists ? writablePaths : ["."];
 
   const snap = await createSnapshot(exec, root, {
     message: `${input.summary}\n\n来源：${input.source}\n章节：${writable.length}`,

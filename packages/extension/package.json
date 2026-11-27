@@ -57,6 +57,12 @@
           "id": "novelpad.annotations",
           "name": "批注",
           "icon": "assets/annotations.svg"
+        },
+        {
+          "id": "novelpad.branches",
+          "name": "支线",
+          "icon": "assets/branches.svg",
+          "contextualTitle": "支线（分工合写）"
         }
       ]
     },
@@ -288,6 +294,36 @@
         "category": "NovelPad",
         "icon": "$(go-to-file)",
         "description": "跳到批注所在的原文位置。"
+      },
+      {
+        "command": "novelpad.branch.new",
+        "title": "NovelPad: 新建支线（分工合写）",
+        "category": "NovelPad",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "novelpad.branch.open",
+        "title": "NovelPad: 并回主稿",
+        "category": "NovelPad",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "novelpad.branch.openWorktree",
+        "title": "NovelPad: 在新窗口打开支线",
+        "category": "NovelPad",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "novelpad.branch.remove",
+        "title": "NovelPad: 删除支线",
+        "category": "NovelPad",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "novelpad.branch.refresh",
+        "title": "NovelPad: 刷新支线列表",
+        "category": "NovelPad",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -351,6 +387,26 @@
           "command": "novelpad.annotations.refresh",
           "when": "view == novelpad.annotations",
           "group": "navigation@2"
+        },
+        {
+          "command": "novelpad.branch.new",
+          "when": "view == novelpad.branches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelpad.branch.refresh",
+          "when": "view == novelpad.branches",
+          "group": "navigation@2"
+        },
+        {
+          "command": "novelpad.branch.new",
+          "when": "view == novelpad.chapters",
+          "group": "2_branch@1"
+        },
+        {
+          "command": "novelpad.branch.open",
+          "when": "view == novelpad.chapters",
+          "group": "2_branch@2"
         }
       ],
       "view/item/context": [
@@ -393,6 +449,21 @@
           "command": "novelpad.annotations.remove",
           "when": "viewItem == annotation.open || viewItem == annotation.open.suggestion || viewItem == annotation.closed",
           "group": "9_danger@1"
+        },
+        {
+          "command": "novelpad.branch.open",
+          "when": "view == novelpad.branches && viewItem == novelpadBranch",
+          "group": "inline@1"
+        },
+        {
+          "command": "novelpad.branch.openWorktree",
+          "when": "view == novelpad.branches && viewItem == novelpadBranch",
+          "group": "inline@2"
+        },
+        {
+          "command": "novelpad.branch.remove",
+          "when": "view == novelpad.branches && viewItem == novelpadBranch",
+          "group": "inline@3"
         }
       ],
       "commandPalette": [
@@ -672,6 +743,11 @@
         "key": "ctrl+alt+enter",
         "mac": "cmd+alt+enter",
         "when": "editorLangId == markdown && editorTextFocus"
+      },
+      {
+        "command": "novelpad.branch.open",
+        "key": "alt+shift+m",
+        "when": "editorLangId == markdown"
       }
     ],
     "markdown.previewStyles": [

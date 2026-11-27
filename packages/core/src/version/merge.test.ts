@@ -771,17 +771,27 @@ describe("执行合并（真实 git）", () => {
     expect(parent).toBe(head);
   });
 
-  it("支持作品子目录前缀", async () => {
+  /**
+   * 作品在仓库子目录时（~/writing 是仓库根，作品在 ~/writing/novel）：
+   * `root` 是**作品根**，`prefix` 是 "novel/"。
+   *
+   * 这条曾经是错的：测试把 root 传成仓库根又传 prefix，
+   * 掩盖了 `git add` 的 pathspec 只能相对 cwd 这一层。
+   */
+  it("支持作品子目录前缀（root 是作品根）", async () => {
     const sub = fs.mkdtempSync(path.join(os.tmpdir(), "np-merge-apply-"));
+    const projectRoot = path.join(sub, "novel");
     try {
       await exec(["init", "-q", "-b", "main"], { cwd: sub });
       await exec(["config", "core.autocrlf", "false"], { cwd: sub });
       const sw = async (rel: string, c: string) => {
-        const p = path.join(sub, "novel", rel);
+        const p = path.join(projectRoot, rel);
         fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p, c, "utf8");
       };
+      fs.mkdirSync(projectRoot, { recursive: true });
       await sw("chapters/001.md", "原文\n");
+      await sw("chapters/002.md", "第二章原文\n");
       await exec(["add", "-A"], { cwd: sub });
       await exec(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd: sub });
       await exec(["checkout", "-q", "-b", "line/x"], { cwd: sub });
@@ -791,7 +801,7 @@ describe("执行合并（真实 git）", () => {
 
       const result = await applyMerge(
         exec,
-        sub,
+        projectRoot,
         {
           source: "line/x",
           targetRef: "refs/novelpad/merge/sub",
@@ -799,14 +809,24 @@ describe("执行合并（真实 git）", () => {
           summary: "合并",
           prefix: "novel/",
         },
-        async () => {
-          // 工作区已经在支线分支上，无需搬运
+        async (file) => {
+          // 把来源版本落到工作区（模拟扩展侧的 materialize）
+          const r = await exec(["show", `line/x:novel/${file}`], { cwd: sub });
+          fs.writeFileSync(path.join(projectRoot, file), r.stdout, "utf8");
         },
       );
 
       expect(result.ok).toBe(true);
+      expect(result.written).toBe(1);
+
       const content = await exec(["show", `${result.commit}:novel/chapters/001.md`], { cwd: sub });
       expect(content.stdout).toContain("支线版本");
+      // 未被合并的章节仍在（base 生效）
+      const other = await exec(["show", `${result.commit}:novel/chapters/002.md`], { cwd: sub });
+      expect(other.stdout).toContain("第二章原文");
+      // 仓库根的其他文件没被带进快照
+      const listed = (await exec(["ls-tree", "-r", "--name-only", result.commit!], { cwd: sub })).stdout;
+      expect(listed).not.toContain("unrelated");
     } finally {
       fs.rmSync(sub, { recursive: true, force: true });
     }

@@ -17,6 +17,7 @@ import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
 import { openTimeline, refreshTimeline } from "./views/timeline";
+import { BranchManager, listMergeableBranches } from "./features/branches";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -75,6 +76,57 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
   store.onDidChange(() => refreshTimeline());
+
+  // 支线（共创 B：分工合写）：worktree + 章节级合并
+  const branches = new BranchManager(store);
+  const branchTree = vscode.window.createTreeView("novelpad.branches", {
+    treeDataProvider: branches.provider,
+  });
+  const branchFromArg = (arg: unknown): string | undefined => {
+    // 菜单/树视图传下来的可能是节点本身，也可能是命令参数
+    if (typeof arg === "string") return arg;
+    if (arg && typeof arg === "object") {
+      const n = arg as { branch?: { name?: string }; label?: string };
+      if (n.branch?.name) return n.branch.name;
+    }
+    return undefined;
+  };
+  context.subscriptions.push(
+    branchTree,
+    branches,
+    vscode.commands.registerCommand("novelpad.branch.new", () => branches.create()),
+    vscode.commands.registerCommand("novelpad.branch.refresh", () => branches.provider.refresh()),
+    vscode.commands.registerCommand("novelpad.branch.open", async (arg: unknown) => {
+      const name = branchFromArg(arg);
+      if (!name) {
+        // 从命令面板/章节视图进来的：让作者选一条
+        const root = store.root?.fsPath;
+        if (!root) {
+          void vscode.window.showWarningMessage("请先打开一个作品");
+          return;
+        }
+        const all = await listMergeableBranches(root);
+        if (!all.length) {
+          void vscode.window.showInformationMessage("还没有可以并回来的支线");
+          return;
+        }
+        const picked = await vscode.window.showQuickPick(all, { placeHolder: "把哪条支线并回主稿？" });
+        if (picked) await branches.openMerge(picked);
+        return;
+      }
+      await branches.openMerge(name);
+    }),
+    vscode.commands.registerCommand("novelpad.branch.openWorktree", async (arg: unknown) => {
+      const name = branchFromArg(arg);
+      if (name) await branches.openWorktree(name);
+    }),
+    vscode.commands.registerCommand("novelpad.branch.remove", async (arg: unknown) => {
+      const name = branchFromArg(arg);
+      if (name) await branches.remove(name);
+    }),
+  );
+  store.onDidChange(() => branches.provider.refresh());
+  branches.provider.refresh();
 
   // L4 装饰级排版：只在作品内的 Markdown 生效，纯视觉，不碰正文
   context.subscriptions.push(new ProseDecorator(store));
