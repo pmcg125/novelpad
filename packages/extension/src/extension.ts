@@ -17,9 +17,10 @@ import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
 import { openTimeline, openTimelineAIOnly, refreshTimeline } from "./views/timeline";
-import { closeStudioIfIdle, isStudioOpen, maybeOpenStudio, openStudio, refreshStudio } from "./views/studio";
+import { closeStudioIfIdle, maybeOpenStudio, openStudio, refreshStudio } from "./views/studio";
 import { BranchManager, listMergeableBranches } from "./features/branches";
 import {
+  AutoPusher,
   HostStatusBar,
   backup,
   connectInteractive,
@@ -212,11 +213,10 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output, annotations, annotationTree);
 
   // 书房（L5）：替代 Welcome 页。只在没有编辑器时出现。
+  // 不给它单独注册「关闭」命令：从命令面板调用时若书房没开，那句
+  // closeActiveEditor 会关掉作者正在写的正文。标签页自带关闭按钮。
   context.subscriptions.push(
     vscode.commands.registerCommand("novelpad.studio", () => openStudio(context, store)),
-    vscode.commands.registerCommand("novelpad.studio.close", () => {
-      if (isStudioOpen()) void vscode.commands.executeCommand("workbench.action.closeActiveEditor");
-    }),
   );
   // 一旦作者打开正文，书房就该让位——它不是挡在稿子前面的一个标签页
   context.subscriptions.push(
@@ -226,6 +226,13 @@ export function activate(context: vscode.ExtensionContext): void {
   // 托管（V5）：作者全程不输入 git 命令
   const hostBar = new HostStatusBar(store, context.secrets);
   hostBar.start();
+  // 存档后自动备份（若作者开了 novelpad.host.autoPush）。
+  // 挂在 onDidSnapshot 上而不是定时器上：只有真的存下一版才推，
+  // 否则会反复上传同一份内容，流量和「被监视感」都不必要。
+  const autoPush = new AutoPusher(store, context.secrets, (state) => {
+    if (state === "done" || state === "failed") void hostBar.refresh();
+  });
+  context.subscriptions.push(autoPush, version.onDidSnapshot(() => void autoPush.afterSave()));
   context.subscriptions.push(
     hostBar,
     vscode.commands.registerCommand("novelpad.host.connect", () => connectInteractive(store, context.secrets)),

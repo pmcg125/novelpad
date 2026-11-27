@@ -138,6 +138,8 @@ export interface DraftChapter {
   words: number;
   volume?: string;
   status: string;
+  /** 作者给这一章定的目标字数，没有就是 undefined */
+  target?: number;
 }
 
 /** 还没定稿的章节，按顺序 */
@@ -151,6 +153,7 @@ export function draftChapters(chapters: readonly Chapter[]): DraftChapter[] {
       words: c.wordCount,
       volume: c.frontmatter.volume,
       status: c.frontmatter.status ?? "draft",
+      target: c.frontmatter.targetWords,
     }));
 }
 

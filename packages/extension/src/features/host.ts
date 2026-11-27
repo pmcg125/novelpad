@@ -35,7 +35,7 @@ import {
   type RemoteInfo,
 } from "@novelpad/core";
 import type { ProjectStore } from "../store";
-import { describeStatus, explainCreateError, hostingProblem, suggestRepoName } from "./host-rules.js";
+import { backupHint, describeStatus, explainCreateError, hostingProblem, suggestRepoName } from "./host-rules.js";
 
 // 纯逻辑在 host-rules.ts（可在 vitest 里加载）。
 // 这里只做转发，避免两处实现各改一半。
@@ -286,15 +286,21 @@ async function githubUserOf(token: string): Promise<string | undefined> {
  * 推送 / 拉取
  * ============================================================ */
 
-async function pushWithCred(store: ProjectStore, cred: HostCredential): Promise<{ ok: boolean; error?: string; url?: string }> {
+async function pushWithCred(
+  store: ProjectStore,
+  cred: HostCredential | undefined,
+): Promise<{ ok: boolean; error?: string; url?: string }> {
   const root = store.root?.fsPath;
   if (!root) return { ok: false, error: "请先打开一个作品" };
   const remote = vscode.workspace.getConfiguration("novelpad").get<string>("host.remote", "origin");
   const r = await push(nodeExec, {
     root,
     remote,
-    token: cred.token,
-    username: cred.username,
+    // 没有可用凭据时不传 token：让 git 用它自己的 credential helper
+    // （GitHub Desktop / GCM 常常已经配好）。传空串会让 askpass 脚本
+    // 吐出一个空密码，那比没有凭据更糟。
+    token: cred?.token || undefined,
+    username: cred?.username || undefined,
     setUpstream: true,
   });
   return { ok: r.ok, error: r.error, url: r.url };
@@ -496,8 +502,11 @@ export class HostStatusBar implements vscode.Disposable {
     try {
       const s = await status(this.store, this.secrets);
       this.item.text = s.connected ? `$(cloud) ${describeStatus(s)}` : "$(cloud-offline) 未连接云端";
+      // tooltip 用 backupHint：它会额外提醒「有改动还没存进版本库，
+      // 备份前会自动存一版」。作者看到「已同步」时最容易误会成
+      // 「现在写的也备份好了」，那句提醒就是防这个。
       this.item.tooltip = s.connected
-        ? `${s.remote?.displayUrl ?? ""}\n点击查看托管状态`
+        ? `${s.remote?.displayUrl ?? ""}\n${backupHint(s)}\n点击查看托管状态`
         : "点击连接到 GitHub，给稿子做个云端备份";
       this.item.show();
     } catch {
@@ -515,6 +524,73 @@ export class HostStatusBar implements vscode.Disposable {
 export async function repoPrefixHint(root: string): Promise<string> {
   const l = await repoLayout(nodeExec, root);
   return l?.prefix ?? "";
+}
+
+/* ============================================================
+ * 自动备份
+ * ============================================================ */
+
+/**
+ * 存档后自动推送，对应设置 `novelpad.host.autoPush`。
+ *
+ * 几个必要的克制：
+ *   - 只在**作者自己的存档之后**触发，不是定时轮询。定时推送会在
+ *     作者深夜写敏感内容时不断上传，那感觉像被监视。
+ *   - 失败**静默**。网络断了就断了，下次存档时再试；弹错误框会让
+ *     作者以为稿子出了问题。只有连续失败才在状态栏留个记号。
+ *   - 同一时间只允许一个推送在飞。存档很快（30s 合并一次），
+ *     而推送可能要几十秒，不排队会并发起一堆 git 进程。
+ */
+export class AutoPusher implements vscode.Disposable {
+  private busy = false;
+  private queued = false;
+  private disposed = false;
+
+  constructor(
+    private readonly store: ProjectStore,
+    private readonly secrets: vscode.SecretStorage,
+    private readonly onState?: (state: "pushing" | "done" | "failed" | "idle") => void,
+  ) {}
+
+  /** 存档之后调用。没开自动备份、没连远端时什么都不做。 */
+  async afterSave(): Promise<void> {
+    if (this.disposed) return;
+    if (!vscode.workspace.getConfiguration("novelpad").get<boolean>("host.autoPush", false)) return;
+
+    if (this.busy) {
+      // 正在推：这一轮的改动留给下一次存档，不排队堆积。
+      // 堆起来后一旦网络恢复会连推十几版，作者看到的进度条会一直转。
+      this.queued = true;
+      return;
+    }
+
+    const s = await status(this.store, this.secrets);
+    if (!s.connected) return;
+    if (!s.preview?.dirty && s.preview?.ahead === 0) return; // 没东西可推
+
+    this.busy = true;
+    this.onState?.("pushing");
+    try {
+      const cred = await resolveCredential(this.secrets, { interactive: false });
+      const r = await pushWithCred(this.store, cred ?? { token: "", username: "", from: "manual" });
+      this.onState?.(r.ok ? "done" : "failed");
+      // 失败不打扰作者：网络问题居多，下次存档会自动重试
+    } catch {
+      this.onState?.("failed");
+    } finally {
+      this.busy = false;
+      if (this.queued && !this.disposed) {
+        this.queued = false;
+        void this.afterSave();
+      } else {
+        this.onState?.("idle");
+      }
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true;
+  }
 }
 
 /**

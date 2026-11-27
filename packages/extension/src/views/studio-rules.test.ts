@@ -216,6 +216,17 @@ describe("draftChapters", () => {
   it("空作品返回空数组", () => {
     expect(draftChapters([])).toEqual([]);
   });
+
+  it("带上目标字数，书房才能显示「已写 / 目标」", () => {
+    const out = draftChapters([ch(1, { targetWords: 3000 }), ch(2)]);
+    expect(out[0]!.target).toBe(3000);
+    expect(out[1]!.target).toBeUndefined();
+  });
+
+  it("定稿的章节不进草稿列表，即使它有目标字数", () => {
+    const out = draftChapters([ch(1, { status: "final", targetWords: 3000 }), ch(2)]);
+    expect(out.map((c) => c.order)).toEqual([2]);
+  });
 });
 
 describe("greeting", () => {

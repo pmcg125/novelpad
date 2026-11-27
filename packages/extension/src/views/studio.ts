@@ -47,7 +47,9 @@ let currentContext: vscode.ExtensionContext | undefined;
 export function maybeOpenStudio(context: vscode.ExtensionContext, store: ProjectStore): void {
   currentStore = store;
   currentContext = context;
-  if (!context.globalState.get<boolean>("novelpad.openStudioOnStartup", true)) return;
+  // 设置项是 novelpad.openStudioOnStartup（不是 globalState 里的键）。
+  // 之前读 globalState 意味着作者在设置里关掉它毫无作用。
+  if (!vscode.workspace.getConfiguration("novelpad").get<boolean>("openStudioOnStartup", true)) return;
 
   setTimeout(() => {
     if (!hasVisibleEditor()) openStudio(context, store);
@@ -120,9 +122,10 @@ interface StudioData {
   todayRemaining: number;
   /** 问候语按作者本地时间算，凌晨不说「早上好」 */
   greet: string;
-  week: { day: string; total: number; delta: number }[];
+  week: { day: string; delta: number }[];
   overdue: { id: string; note?: string; due: number; chapter: string }[];
-  drafts: { title: string; order: number; words: number; volume?: string }[];
+  /** 还没定稿的章节，服务端已按顺序排好 */
+  drafts: { title: string; order: number; words: number; volume?: string; status: string; target?: number }[];
   recent: { title: string; path: string; exists: boolean }[];
   hasVersion: boolean;
   /** 今日目标，来自设置 */
@@ -180,7 +183,7 @@ async function collect(context: vscode.ExtensionContext, store: ProjectStore): P
       // 作者昨天开着没关，今天看到的就会是 0。
       today = todayDelta(groups);
       // 曲线必须补齐空白天，否则「昨天没写」会变成两点直连。
-      week = weekCurve(groups).map((p) => ({ day: p.day, total: 0, delta: p.delta }));
+      week = weekCurve(groups);
     }
   } catch {
     /* 没有版本库（还没存过档）是常态，不是错误 */
@@ -201,6 +204,8 @@ async function collect(context: vscode.ExtensionContext, store: ProjectStore): P
     order: c.order,
     words: c.words,
     volume: c.volume,
+    status: c.status,
+    target: c.target,
   }));
 
   // 把当前作品顶到最近列表最前，下次启动时它就在第一张卡上
@@ -235,7 +240,7 @@ async function pushAll(context: vscode.ExtensionContext, store: ProjectStore): P
   // 每打开一次书房就把最近作品记下来。存绝对路径是为了能真的打开它，
   // 所以同时存 exists——盘符变了/文件夹被挪走时要如实标出来，不能点了没反应。
   await writeRecent(context, data.recent);
-  void panel.webview.postMessage({ type: "data", data, isDark: isDark() });
+  void panel.webview.postMessage({ type: "data", data, dark: isDark() });
 }
 
 function readRecent(context: vscode.ExtensionContext): StudioData["recent"] {
@@ -394,6 +399,9 @@ body {
 .ring { text-align: center; }
 .ring svg { display: block; margin: 0 auto; }
 .ring .cap { font-size: 11.5px; color: var(--muted); margin-top: 10px; letter-spacing: .04em; }
+.ring .cap b { color: var(--fg); font-variant-numeric: tabular-nums; }
+/* 深色下水墨字在近黑底上偏细，补一点字重 */
+body.dark .top h1 { font-weight: 650; }
 .ring .big { font-size: 15px; color: var(--fg); }
 .ring .big b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -549,7 +557,6 @@ function render() {
   }
 
   const totalDelta = d.week.reduce((s, x) => s + (x.delta || 0), 0);
-  const inProgress = d.chapters.filter((c) => c.status !== "final");
 
   $("#root").innerHTML = \`
     <div class="top">
@@ -567,7 +574,11 @@ function render() {
     <div class="duo">
       <div class="ring">
         \${ring(d.todayWords, d.dailyTarget, d.todayRatio, d.todayDone)}
-        <div class="cap">\${d.todayDone ? "今天达标了" : "今日已写"}</div>
+        <div class="cap">
+          \${d.todayDone
+            ? "今天达标了"
+            : "今日已写" + (d.todayRemaining > 0 ? "，还差 " + nf(d.todayRemaining) + " 字" : "")}
+        </div>
       </div>
       <div class="curve">
         <div class="h">
@@ -593,10 +604,10 @@ function render() {
     </div>\` : ""}
 
     <div class="sec">
-      <div class="h"><span class="t">未完成</span><span class="c">\${inProgress.length} 章</span></div>
+      <div class="h"><span class="t">未完成</span><span class="c">\${d.drafts.length} 章</span></div>
       \${d.chapters.length ? \`
       <div class="rows">
-        \${inProgress.slice(0, 8).map((c) => \`
+        \${d.drafts.slice(0, 8).map((c) => \`
           <button class="row" data-order="\${c.order}">
             <span class="idx">\${c.order}</span>
             <span class="ttl">\${esc(c.title)}</span>
@@ -671,6 +682,8 @@ window.addEventListener("message", (e) => {
   const msg = e.data;
   if (msg.type === "data") {
     DATA = msg.data;
+    // 深色下水墨标题需要一点字重补偿，否则在近黑的背景上显得发飘
+    document.body.classList.toggle("dark", Boolean(msg.dark));
     render();
   }
 });

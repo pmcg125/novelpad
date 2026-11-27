@@ -59,6 +59,14 @@ export class VersionManager implements vscode.Disposable {
   /** git 操作串行队列 */
   private queue: Promise<void> = Promise.resolve();
   private disposed = false;
+  private readonly _onDidSnapshot = new vscode.EventEmitter<SnapshotRecord>();
+  /**
+   * 存下一版之后触发。
+   *
+   * 自动备份挂在这里——它必须在**存档之后**推，否则推上去的是
+   * 上次保存时的内容。也让时间线能立刻刷新，作者不用手动切一下再看。
+   */
+  readonly onDidSnapshot = this._onDidSnapshot.event;
 
   constructor(private readonly store: ProjectStore) {}
 
@@ -177,6 +185,10 @@ export class VersionManager implements vscode.Disposable {
 
       // 滚动清理：每章只留最近 N 个（ref 与索引一起删）
       if (chapter) await pruneAutoSnapshots(nodeExec, root, chapter, AUTO_KEEP_PER_CHAPTER);
+
+      // `empty: true` 表示内容和上一版一字不差，没造出记录——
+      // 那种情况下不该触发自动备份，否则每按一次 Ctrl+S 都推一次。
+      if (out.record) this._onDidSnapshot.fire(out.record);
     });
   }
 
@@ -224,6 +236,7 @@ export class VersionManager implements vscode.Disposable {
         return;
       }
       rec = out.record;
+      if (rec) this._onDidSnapshot.fire(rec);
     });
     return rec;
   }
@@ -344,6 +357,7 @@ export class VersionManager implements vscode.Disposable {
     this.idleTimer = undefined;
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
+    this._onDidSnapshot.dispose();
   }
 }
 
