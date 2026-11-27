@@ -3,6 +3,13 @@ name: Shell Build
 # 构建定制 VS Code 壳：上游源码 → overlay + patches → gulp 构建 → 塞入扩展 → 产物
 # 首次构建约 40~60 分钟/平台。只在 shell/ 或扩展变动、手动触发、打 tag 时运行。
 
+# 一次壳构建要占三个平台的 runner 近一小时。往 main 连着 push 时，
+# 旧运行产出的是过期提交，留着只是占坑，所以让后到的取代先到的。
+# group 带 ref：打 tag 触发的运行不会被 main 上的 push 牵连取消。
+concurrency:
+  group: shell-build-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -24,8 +31,39 @@ jobs:
     outputs:
       tag: ${{ steps.up.outputs.tag }}
       matrix: ${{ steps.m.outputs.matrix }}
+      # 见下面「判断是否执行 gulp」那一步：把「这次要不要真编译」算成明确字符串
+      gulp: ${{ steps.g.outputs.gulp }}
     steps:
       - uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 这次要不要真的跑 gulp。
+      #
+      # 之前直接写 `if: inputs.gulpBuild != false`，在 push / tag 触发的运行里
+      # **是错的**：inputs 在那种事件下不存在，`inputs.gulpBuild` 求值为 null，
+      # 而 GitHub 表达式把 `null == false` 判为 true。结果三条闸门同时成立：
+      # 「安装依赖」和「构建」被 skipped，「造占位产物」被执行——
+      # 每次 push 出来的都是一个几 MB 的空壳，却标记为构建成功。
+      # 实测见 run 46032996985：三个平台的 gulp 步骤全是 skipped。
+      #
+      # 规则：只有手动触发且明确勾掉 gulpBuild 时才走占位。
+      # 其它事件（push / tag）一律真编译。
+      # ------------------------------------------------------------------
+      - name: 判断是否执行 gulp
+        id: g
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          WANT: ${{ inputs.gulpBuild }}
+        run: |
+          # boolean input 转成字符串时大小写不确定（true / False 都出现过），
+          # 统一转小写再比。空值 = 非手动触发，按「要真编译」处理。
+          want="$(printf '%s' "$WANT" | tr '[:upper:]' '[:lower:]')"
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$want" = "false" ]; then
+            echo "gulp=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "gulp=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 读上游版本
         id: up
@@ -136,7 +174,7 @@ jobs:
         with: { python-version: "3.11" }
 
       - name: 安装依赖
-        if: inputs.gulpBuild != false
+        if: needs.prepare.outputs.gulp == 'true'
         working-directory: upstream
         shell: bash
         env:
@@ -147,14 +185,17 @@ jobs:
           ${{ steps.pm.outputs.install }}
 
       - name: 构建（gulp ${{ matrix.gulp }}）
-        if: inputs.gulpBuild != false
+        if: needs.prepare.outputs.gulp == 'true'
         working-directory: upstream
         shell: bash
         run: npx gulp ${{ matrix.gulp }}
 
-      # 跳过真实编译时（gulpBuild=false），造一个最小目录，只验证 embed + 打包链路
-      - name: 造占位产物（仅 gulpBuild=false）
-        if: inputs.gulpBuild == false
+      # 跳过真实编译时（只在手动勾掉 gulpBuild 时），造一个最小目录，
+      # 用来单独验证 embed + 打包链路。条件必须是「等于 false」而不是
+      # 「不等于 true」——后者在 push/tag 事件下会成立，等于把占位产物
+      # 当成正式构建发出去。
+      - name: 造占位产物（仅手动跳过 gulp 时）
+        if: needs.prepare.outputs.gulp == 'false'
         shell: bash
         run: |
           mkdir -p "${{ matrix.out }}/resources/app/extensions"
@@ -250,6 +291,12 @@ jobs:
       # 也就是那段文字**直接消失**，且不报错。装饰引用的每个色都要在主题里定义。
       - name: 检查主题颜色完整性
         run: node shell/scripts/check-themes.mjs packages/extension
+
+      # 构建闸门：push / tag 事件里没有 inputs，`inputs.gulpBuild != false`
+      # 会被 null 的隐式转换判成 true，于是每次 push 都产出空壳却全绿。
+      # 这段直接从 workflow 抠 bash 正文跑，改 workflow 不用改这里。
+      - name: 检查构建闸门
+        run: node shell/scripts/check-gate.mjs
 
       # 版本管理端到端：真实 git，不 mock。
       # 三个静默缺陷只能这样测出来：子目录路径前缀、快照范围越界、污染作者索引。
