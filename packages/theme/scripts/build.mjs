@@ -6,7 +6,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../themes");
+// 可选参数：输出目录。校验脚本会传一个临时目录，用「重新生成一遍再比对」
+// 来确认仓库里的主题 JSON 没有被手改过（手改会在下次构建被静默覆盖）。
+const out = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../themes");
 fs.mkdirSync(out, { recursive: true });
 
 /* ---------- 令牌（与 mockup.css 一致） ---------- */
@@ -14,6 +18,7 @@ const PAPER = {
   bgEditor: "#F7F3E8", bgSidebar: "#F0EBDD", bgActivity: "#2F2D2A", bgStatus: "#E8E2D4",
   bgHover: "#EAE4D6", bgActive: "#E3E9DC", bgInput: "#FBF8F0", border: "#E1DACA",
   fgText: "#2B2825", fgUi: "#3A3630", fgMuted: "#6B645C", fgFaint: "#948C80",
+  fgDisabled: "#8E877F",
   accent: "#2F7D6B", accentFg: "#FFFFFF", accentSoft: "#E3E9DC",
   warning: "#B7791F", error: "#C5283D", success: "#3C8C5A", info: "#3A6EA5",
 };
@@ -21,6 +26,7 @@ const INK = {
   bgEditor: "#201F1C", bgSidebar: "#1B1A17", bgActivity: "#141311", bgStatus: "#171614",
   bgHover: "#24231F", bgActive: "#242923", bgInput: "#26241F", border: "#2C2A26",
   fgText: "#DAD3C6", fgUi: "#CFC8BA", fgMuted: "#9A938A", fgFaint: "#6E685E",
+  fgDisabled: "#7E7770",
   accent: "#5CB8A6", accentFg: "#10201B", accentSoft: "#1F2D28",
   warning: "#D9A04A", error: "#E5586B", success: "#5DBA82", info: "#7AA9DA",
 };
@@ -183,6 +189,40 @@ function workbenchColors(t) {
     "quickInput.background": t.bgInput,
     "quickInput.foreground": t.fgUi,
     "quickInputList.focusBackground": t.bgActive,
+
+    /* ---- 界面各处直接引用的颜色 ----
+     *
+     * 这些是 webview CSS（var(--vscode-…)）和装饰（new ThemeColor(…)）
+     * 会读到的键。**每一个都必须显式定义**，缺色有两种失效方式，
+     * 都不报错：
+     *   - ThemeColor 读不到 → 上游 resolveValue 返回 'transparent'
+     *     → 那段文字直接消失（作者以为稿子丢了）
+     *   - CSS var 读不到 → 回落到 VS Code 默认值 → 宣纸页面上
+     *     出现微软蓝链接（webview 拿不到主题兜底，就是裸的默认值）
+     *
+     * 注意上游的 registry 默认值是按 VS Code 自己的视觉体系定的，
+     * 跟 NovelPad 的暖宣纸/青绿完全不搭，不能指望它兜底。
+     */
+    disabledForeground: t.fgDisabled,
+    "textLink.foreground": t.accent,
+    // 悬停/点按时的链接色：比静置亮一档。上游 light 默认是 #0066BF，
+    // 不定义的话 markdown 预览里的链接一碰就变微软蓝。
+    "textLink.activeForeground": t.accent + "CC",
+    "gitDecoration.addedResourceForeground": t.success,
+    "gitDecoration.modifiedResourceForeground": t.warning,
+    "gitDecoration.deletedResourceForeground": t.error,
+    "gitDecoration.ignoredResourceForeground": t.fgFaint,
+    // 代码块底色：比 input 深一档，在宣纸上是一块淡淡的墨痕
+    "textCodeBlock.background": t.bgHover,
+    // 引用块：底色与左竖线，预览里 `> 引文` 用的就是这两个
+    "textBlockQuote.background": t.bgSidebar,
+    "textBlockQuote.border": t.accent + "66",
+    // 焦点描边。上游 light 默认同样是蓝色系；写作界面里到处是
+    // 输入框和列表项，焦点色不统一会一眼看出不是同一个主题。
+    focusBorder: t.accent + "99",
+    // 高对比分隔线。我们的主题不靠它活着（多数用法带 fallback），
+    // 但 workbench.css 有一处裸用，缺色会退化成 currentColor 的重线。
+    contrastBorder: t.border,
   };
 }
 /** TextMate 语法着色：面向 Markdown / YAML 写作场景 */

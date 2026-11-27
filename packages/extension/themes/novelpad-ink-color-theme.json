@@ -158,7 +158,17 @@
     "quickInput.foreground": "#CFC8BA",
     "quickInputList.focusBackground": "#242923",
     "disabledForeground": "#7E7770",
-    "textLink.foreground": "#5CB8A6"
+    "textLink.foreground": "#5CB8A6",
+    "textLink.activeForeground": "#5CB8A6CC",
+    "gitDecoration.addedResourceForeground": "#5DBA82",
+    "gitDecoration.modifiedResourceForeground": "#D9A04A",
+    "gitDecoration.deletedResourceForeground": "#E5586B",
+    "gitDecoration.ignoredResourceForeground": "#6E685E",
+    "textCodeBlock.background": "#24231F",
+    "textBlockQuote.background": "#1B1A17",
+    "textBlockQuote.border": "#5CB8A666",
+    "focusBorder": "#5CB8A699",
+    "contrastBorder": "#2C2A26"
   },
   "tokenColors": [
     {
