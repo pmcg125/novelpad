@@ -220,9 +220,12 @@ foreshadows: [{ id: fs-umbrella, due: 12 }]
 | **M4 RAG** | 本地 Embedding、sqlite-vec、增量索引、检索器接入 Copilot | 续写「懂设定」 |
 | **M5 图谱** | 显式关系 → G6 云图；LLM 抽取 → 事件链 / 剧情发展链 | 可视化护城河 |
 | **M6 壳 v1** | 拉取 VS Code 源码、product.json、主题、默认配置、补丁脚本、构建发行版 | NovelPad 独立产品 |
-| **M7 生态** | lint 规则插件化、设定包分享、Open VSX 发布、PDF 导出 | 对外发布 |
+| **M7 界面定制** | 壳挂载点 + 皮肤 CSS + 排版设置 / 装饰 + 书房首页 + 楷体随包（详见 [PLAN-UI.md](./PLAN-UI.md)） | 像写作软件，不像代码编辑器 |
+| **M8 版本与共创** | 文章版 git：自动存档 / 里程碑 / 段落级 diff / 批注建议 / 支线合并（详见 [PLAN-VERSIONING.md](./PLAN-VERSIONING.md)） | 作者不用懂 git 也能安心改稿 |
+| **M9 生态** | lint 规则插件化、设定包分享、Open VSX 发布、PDF 导出 | 对外发布 |
 
 > M0~M5 全程不依赖源码构建，用标准 VS Code + F5 开发；M6 才引入源码。
+> M7 之后**只有一处需要重编壳**（workbench.html 的挂载点），皮肤与排版都在扩展里，秒级迭代。
 
 ---
 
