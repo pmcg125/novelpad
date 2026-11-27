@@ -1,0 +1,11 @@
+# 只打包运行时真正需要的文件
+src/**
+scripts/**
+.vscode-test/**
+tsconfig.json
+vitest.config.ts
+.dl.mjs
+**/*.map
+**/*.ts
+!**/*.d.ts
+node_modules/.cache/**
