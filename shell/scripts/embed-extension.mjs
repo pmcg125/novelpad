@@ -8,7 +8,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { extractZip } from "./lib/zip.mjs";
+import { validateExtensionManifest } from "./lib/manifest.mjs";
 
 const [appDir, vsix] = process.argv.slice(2);
 if (!appDir || !vsix || !fs.existsSync(vsix)) {
@@ -21,12 +22,13 @@ const extDir = path.join(appDir, "extensions", "novelpad");
 fs.rmSync(extDir, { recursive: true, force: true });
 fs.mkdirSync(extDir, { recursive: true });
 
-// vsix 就是 zip。用 bsdtar 解（Windows 10+/Server 2022 自带，Linux/mac 也有）；
-// 不能用 PowerShell 5.1 的 Expand-Archive：其内部 .NET 重载在 runner 上不存在
+// vsix 就是 zip。用自带的纯 JS 解压器，不调系统 tar：
+// Windows 的 `tar` 是 bsdtar 能读 zip，Linux 的 GNU tar 不能，
+// 一律报 "This does not look like a tar archive"。
 const tmp = path.join(path.dirname(path.resolve(vsix)), ".vsix-extract");
 fs.rmSync(tmp, { recursive: true, force: true });
 fs.mkdirSync(tmp, { recursive: true });
-execFileSync("tar", ["-xf", path.resolve(vsix), "-C", tmp], { stdio: "inherit" });
+const { files } = extractZip(path.resolve(vsix), tmp);
 // vsix 内 extension/ 目录才是扩展本体
 const inner = path.join(tmp, "extension");
 if (!fs.existsSync(inner)) {
@@ -36,14 +38,26 @@ if (!fs.existsSync(inner)) {
 fs.cpSync(inner, extDir, { recursive: true });
 fs.rmSync(tmp, { recursive: true, force: true });
 
-// 注册为内置扩展：追加到 product.json 的 builtInExtensions
+// 不再往 product.json 写 builtInExtensions。
+//
+// 核实过 1.85.0 源码（extensionsScannerService.ts:403）：
+//   const devSystemExtensionsList = this.environmentService.isBuilt ? [] : productService.builtInExtensions;
+// 发行版里 isBuilt 为真，这个字段被直接丢掉，只用于开发模式下的 .build/builtInExtensions。
+// 运行时真正扫描的是 environmentService.builtinExtensionsPath，
+// 即 resources/app/../extensions（environmentService.ts:114-121）。
+// 所以「放进 extensions/ 目录」本身就是注册，不需要也不应该动 product.json。
+//
+// 顺带一提：`msExecPath` 在 1.85.0 源码里一处都不存在，那个字段是凭空写出来的。
 const productPath = path.join(appDir, "product.json");
-const product = JSON.parse(fs.readFileSync(productPath, "utf8"));
+if (!fs.existsSync(productPath)) throw new Error(`产物里没有 product.json：${productPath}`);
+
+// 校验 manifest：manifest 有问题时 VS Code 不会报错，只会静默不激活——
+// 命令全部「未找到」却没有任何日志，在别人机器上几乎无法排查。
+const problems = validateExtensionManifest(extDir);
+if (problems.length) {
+  throw new Error(`扩展装进去也不会工作：\n  - ${problems.join("\n  - ")}`);
+}
 const pkg = JSON.parse(fs.readFileSync(path.join(extDir, "package.json"), "utf8"));
-product.builtInExtensions = [
-  ...(product.builtInExtensions ?? []).filter((e) => e.name !== pkg.name),
-  { name: pkg.name, version: pkg.version, path: "extensions/novelpad", msExecPath: `${path.basename(appDir)}/extensions/novelpad` },
-];
-fs.writeFileSync(productPath, JSON.stringify(product, null, 2) + "\n");
-log(`内置扩展 ${pkg.name}@${pkg.version} → ${path.relative(appDir, extDir)}`);
-log("完成");
+
+log(`内置扩展 ${pkg.name}@${pkg.version} → ${path.relative(appDir, extDir)}（${files} 个文件）`);
+log("完成（内置扩展靠目录被扫描，无需登记 product.json）");;

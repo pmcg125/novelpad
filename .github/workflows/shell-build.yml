@@ -223,7 +223,14 @@ jobs:
           fetch-depth: 1
       - run: node shell/scripts/apply.mjs upstream
 
-      # 皮肤校验：选择器是否真实存在（上游改版第一道报警）
+      # 内置扩展链路：解压与分析完全在纯 JS 里做。
+      # 之前用 `tar -xf` 解 vsix，Windows 的 bsdtar 能读 zip，Linux 的 GNU tar 不能，
+      # linux job 一律挂在这一步。这段不编译任何东西，秒级，先跑。
+      - name: 验证内置扩展链路
+        run: node shell/scripts/verify-embed.mjs
+
+      # 皮肤校验：选择器引用未定义的类名 = 运行时静默失效。
+      # 上游改版改名时这里先出声，比等用户报告快。
       - name: 检查皮肤选择器
         run: node shell/scripts/check-css.mjs upstream packages/extension/media/workbench.css packages/extension/media/markdown-preview.css
 
