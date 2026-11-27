@@ -9,11 +9,21 @@ import { EditActions } from "./edit";
 import { QaFeature, collectFacts } from "./qa";
 import { showReasoning } from "./reasoning";
 import type { ProjectStore } from "../store";
+import type { VersionManager } from "../features/version";
 
-export function registerCopilot(context: vscode.ExtensionContext, store: ProjectStore): { continuation: ContinuationFeature } {
+/** AI 产出落到正文后的通知：版本管理据此打上 AI 标记 */
+export interface AISourceSink {
+  markAI(uri: vscode.Uri, info?: { prompt?: string; model?: string }): void;
+}
+
+export function registerCopilot(
+  context: vscode.ExtensionContext,
+  store: ProjectStore,
+  version?: VersionManager,
+): { continuation: ContinuationFeature } {
   const config = new CopilotConfig(context.secrets);
-  const continuation = new ContinuationFeature(store, config);
-  const edit = new EditActions(store, config);
+  const continuation = new ContinuationFeature(store, config, version);
+  const edit = new EditActions(store, config, version);
   const qa = new QaFeature(store, config);
 
   const d: vscode.Disposable[] = [

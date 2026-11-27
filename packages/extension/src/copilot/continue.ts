@@ -9,6 +9,7 @@ import type { ProjectStore } from "../store";
 import { CopilotConfig } from "./config";
 import { reasoningStatusBar, type ReasoningEntry } from "./reasoning";
 import { RagManager } from "../rag/manager";
+import type { VersionManager } from "../features/version";
 
 /** 把文档文本按光标切分，得到 frontmatter 之后的正文偏移 */
 function splitAtCursor(doc: vscode.TextDocument, cursor: vscode.Position): { before: string; offset: number } {
@@ -40,6 +41,7 @@ export class ContinuationFeature {
   constructor(
     private readonly store: ProjectStore,
     private readonly config: CopilotConfig,
+    private readonly version?: VersionManager,
   ) {
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
     this.status.text = "$(sparkle) 思考中…";
@@ -138,6 +140,10 @@ export class ContinuationFeature {
       const start = cursor.with(undefined, cursor.character);
       const end = editor.document.positionAt(editor.document.offsetAt(start) + clean.length);
       editor.selection = new vscode.Selection(start, end);
+
+      // 告诉版本管理：这次改动来自 AI。
+      // 必须在 edit 之后：那时文档已含新内容，flush 才会把它一起存档。
+      this.version?.markAI(editor.document.uri, { prompt: hint, model: cfg.model });
 
       // 思考过程
       const entry: ReasoningEntry = { kind: "续写", reasoning: out.reasoning, output: clean, elapsedMs: out.elapsedMs };

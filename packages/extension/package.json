@@ -324,6 +324,18 @@
         "title": "NovelPad: 刷新支线列表",
         "category": "NovelPad",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "novelpad.version.undoAI",
+        "title": "NovelPad: 撤销这次 AI 续写",
+        "category": "NovelPad",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "novelpad.version.aiOnly",
+        "title": "NovelPad: 只看 AI 改过的地方",
+        "category": "NovelPad",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {

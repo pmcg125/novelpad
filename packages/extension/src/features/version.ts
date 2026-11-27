@@ -13,13 +13,17 @@
 import * as vscode from "vscode";
 import {
   autoSnapshot,
+  describeUndo,
   ensureRepo,
   loadIndex,
   loadProject,
   milestoneSnapshot,
   nodeExec,
+  planAIUndo,
   pruneAutoSnapshots,
+  readSnapshotFile,
   AUTO_KEEP_PER_CHAPTER,
+  type Origin,
   type SnapshotRecord,
 } from "@novelpad/core";
 import type { ProjectStore } from "../store";
@@ -28,6 +32,14 @@ import type { ProjectStore } from "../store";
 const MERGE_WINDOW_MS = 30_000;
 /** 空闲这么久后落一版（作者在思考时不该产生存档） */
 const IDLE_SNAPSHOT_MS = 5 * 60_000;
+/**
+ * AI 标记的有效期。
+ *
+ * AI 续写插入正文后，作者可能继续写很久才保存。标记过期后
+ * 落下的快照就不再算「AI 引入」——否则他会看到一条两小时后的
+ * 存档被标成 AI 写的，那条里其实全是他自己后来写的字。
+ */
+const AI_MARK_TTL_MS = 15 * 60_000;
 
 export class VersionManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
@@ -37,6 +49,13 @@ export class VersionManager implements vscode.Disposable {
   private pendingChapter: string | undefined;
   /** 每个文件上次进入 pending 的时间，用于 30s 合并判定 */
   private readonly lastQueued = new Map<string, number>();
+  /**
+   * 由 AI 引入、还没落盘的改动：文件 → 来源信息。
+   *
+   * 只记「哪个文件被 AI 动过」而不记「哪几个字」，因为落盘时
+   * 整个文件已经混在一起了——真正的分账在撤销时按段落做（planAIUndo）。
+   */
+  private readonly aiTouched = new Map<string, { origin: Origin; at: number }>();
   /** git 操作串行队列 */
   private queue: Promise<void> = Promise.resolve();
   private disposed = false;
@@ -142,7 +161,13 @@ export class VersionManager implements vscode.Disposable {
         files,
         totalWords,
         deltaWords: delta,
+        // 这次落盘有没有 AI 参与：有就整条快照标 AI，
+        // 时间线上用青色徽标区分，撤销时也据此判定。
+        origin: this.originFor(files),
       });
+
+      // 标记已消费：下一次普通保存不该还带着 AI 身份
+      for (const f of files) this.aiTouched.delete(f);
 
       if (!out.ok) {
         // 存档失败不该打断写作：只提示，不弹窗阻塞
@@ -201,6 +226,106 @@ export class VersionManager implements vscode.Disposable {
       rec = out.record;
     });
     return rec;
+  }
+
+  /**
+   * 标记「这个文件的这次改动来自 AI」。
+   *
+   * 由 Copilot 在插入/替换正文后调用。不落盘、不进索引——它只在
+   * 下一次 flush 时决定「这条快照要不要标 AI」。作者如果在这期间
+   * 自己改了很多，标记照样生效（整个文件一起存档），撤销时
+   * planAIUndo 会按段落把作者改过的地方留下来。
+   */
+  markAI(fileUri: vscode.Uri, info: { prompt?: string; model?: string } = {}): void {
+    const root = this.store.root;
+    if (!root) return;
+    const rel = relFrom(root.fsPath, fileUri.fsPath);
+    if (!rel) return;
+
+    this.aiTouched.set(rel, {
+      origin: { kind: "ai", prompt: info.prompt, model: info.model },
+      at: Date.now(),
+    });
+
+    // AI 刚写完，很快就会被保存；把它排进队列，
+    // 否则标记会等到下一次作者手动保存才生效，而那时
+    // 可能已经过了 TTL，或者被后来的普通保存覆盖。
+    this.lastQueued.set(rel, Date.now());
+    this.pending.add(rel);
+    const chapter = chapterKeyOf(rel);
+    if (chapter) this.pendingChapter = chapter;
+    this.armIdleTimer();
+  }
+
+  /** 取这次 flush 的 AI 来源：只有明确标记过且没过期的文件才算 */
+  private originFor(files: readonly string[]): Origin | undefined {
+    const now = Date.now();
+    for (const f of files) {
+      const m = this.aiTouched.get(f);
+      if (m && now - m.at <= AI_MARK_TTL_MS) return m.origin;
+    }
+    return undefined;
+  }
+
+  /**
+   * 撤销某次 AI 续写引入的段落。
+   *
+   * 只删 AI 新增的段，作者在这期间自己写的一概不动——细节与理由
+   * 见 core 的 `planAIUndo`。这里负责三件内核不管的事：
+   *   1. 找到「同章节的上一版」作为对比基线
+   *   2. 走编辑器 API 改文件（保住撤销栈与保存状态）
+   *   3. 改完立刻打一版存档，让时间线上有据可查
+   */
+  async undoAI(rec: SnapshotRecord): Promise<{ ok: boolean; message: string }> {
+    const rootUri = this.store.root;
+    if (!rootUri) return { ok: false, message: "没有打开作品" };
+    const root = rootUri.fsPath;
+
+    if (rec.origin.kind !== "ai") return { ok: false, message: "这一版不是 AI 写的" };
+    const file = rec.files.find((f) => /^chapters\//.test(f)) ?? rec.files[0];
+    if (!file) return { ok: false, message: "这一版没有记录改动文件" };
+
+    const idx = loadIndex(root);
+    // 基线：同章节、比它早的最近一版。
+    // 优先取人写的——如果上一版也是 AI，减出来的「新增」会包含
+    // 上一次 AI 的产出，撤销一次就把两次续写都删了。
+    const same = idx.snapshots.filter((s) => s.chapter && s.chapter === rec.chapter && s.time < rec.time);
+    const prev =
+      same.filter((s) => s.origin.kind === "human").sort((a, b) => (a.time < b.time ? 1 : -1))[0] ??
+      same.sort((a, b) => (a.time < b.time ? 1 : -1))[0];
+
+    const aiText = await readSnapshotFile(nodeExec, root, rec, file);
+    if (aiText === undefined) return { ok: false, message: `这一版里没有 ${file}` };
+    const prevText = prev ? await readSnapshotFile(nodeExec, root, prev, file) : undefined;
+
+    // 以磁盘上的当前内容为准：作者可能已经改过，甚至关了编辑器
+    const uri = vscode.Uri.joinPath(rootUri, ...file.split("/"));
+    let currentText: string;
+    try {
+      currentText = await vscode.workspace.fs.readFile(uri).then((b) => Buffer.from(b).toString("utf8"));
+    } catch {
+      return { ok: false, message: `打不开 ${file}` };
+    }
+
+    const plan = planAIUndo({ prevText, aiText, currentText });
+    if (plan.noop) return { ok: false, message: describeUndo(plan) };
+
+    // 用编辑器改而不是直接写文件：作者可能正开着这一章，
+    // 直接写磁盘会让他的编辑器变成「磁盘已变」状态，撤销栈也断了。
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(doc, { preview: false });
+    const full = new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length));
+    const ok = await editor.edit((eb) => eb.replace(full, plan.text), {
+      undoStopBefore: true,
+      undoStopAfter: true,
+    });
+    if (!ok) return { ok: false, message: "改动被编辑器拒绝，可能文件正被占用" };
+
+    await doc.save();
+
+    // 打完这版再返回：时间线上立刻能看到「撤销」这个动作
+    await this.flush("manual");
+    return { ok: true, message: describeUndo(plan) };
   }
 
   /* ============================================================

@@ -65,8 +65,14 @@ export function splitParagraphs(text: string): string[] {
   return text
     .replace(/\r\n?/g, "\n")
     .split(/\n[ \t]*\n+/)
-    // 只清掉段首的空白行和段末的行尾空白；段首缩进的空格不动（可能是缩进写法）
-    .map((p) => p.replace(/^(?:[ \t]*\n)+/, "").replace(/[ \t]+$/, ""))
+    // 清掉段首的空白行和段末的行尾空白（含换行）。
+    //
+    // 末尾换行必须清：文件最后一段后面只有一个 `\n`，没有空行，
+    // 它不会被 split 吃掉。若不清，「在文末追加一段」会让原末段
+    // 从 `A` 变成 `A\n`，段级 LCS 判定为「修改」而不是「新增」——
+    // 作者在时间线上看到自己一个字没动的上一段被标成改过，
+    // AI 分账也会因为「没有新增段落」而拒绝撤销。
+    .map((p) => p.replace(/^(?:[ \t]*\n)+/, "").replace(/[ \t\r\n]+$/, ""))
     .filter((p) => p.length > 0 && p.trim().length > 0);
 }
 

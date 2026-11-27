@@ -16,6 +16,31 @@ describe("splitParagraphs", () => {
     expect(splitParagraphs("")).toEqual([]);
     expect(splitParagraphs("\n\n\n")).toEqual([]);
   });
+
+  it("末尾段落的行尾换行被清掉（否则「文末追加一段」会被误判成修改原末段）", () => {
+    // 文件最后一段后面只有一个换行，没有空行，不会被 split 吃掉。
+    // 留着它会让同一个段落在前后两版里一个是 "A"、一个是 "A\n"，
+    // 段级 LCS 判定为「修改」，时间线与 AI 分账都会看错。
+    expect(splitParagraphs("甲\n\n乙\n")).toEqual(["甲", "乙"]);
+    expect(splitParagraphs("甲\n\n乙\n")).toEqual(splitParagraphs("甲\n\n乙"));
+  });
+
+  it("段末的行尾空格与 \\r 一并清掉（Windows 保存的文件）", () => {
+    expect(splitParagraphs("甲  \r\n\r\n乙\t\r\n")).toEqual(["甲", "乙"]);
+  });
+
+  it("段首缩进原样保留（作者可能用空格缩进）", () => {
+    expect(splitParagraphs("  缩进段\n\n下一段")).toEqual(["  缩进段", "下一段"]);
+  });
+});
+
+describe("追加段落不会被判成修改", () => {
+  it("在文末追加一段：原末段是 same，新段是 added", () => {
+    const d = diffParagraphs("甲。\n\n乙。\n", "甲。\n\n乙。\n\n丙。\n");
+    expect(d.blocks.map((b) => b.type)).toEqual(["same", "same", "added"]);
+    expect(d.stats.changed).toBe(0);
+    expect(d.stats.added).toBe(1);
+  });
 });
 
 describe("tokenize", () => {

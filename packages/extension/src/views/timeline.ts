@@ -34,8 +34,18 @@ export function openTimeline(store: ProjectStore): void {
   void pushTimeline(store);
 }
 
+/** 供命令层打开时间线并直接切到「只看 AI」 */
+export function openTimelineAIOnly(store: ProjectStore): void {
+  openTimeline(store);
+  setTimeout(() => void panel?.webview.postMessage({ type: "setFilter", onlyAI: true }), 300);
+}
+
 export function refreshTimeline(): void {
   if (panel && currentStore) void pushTimeline(currentStore);
+}
+
+export function isTimelineOpen(): boolean {
+  return panel !== undefined;
 }
 
 /* ============================================================
@@ -249,6 +259,35 @@ async function onMessage(store: ProjectStore, msg: { type: string; [k: string]: 
     void vscode.commands.executeCommand("novelpad.version.milestone");
     return;
   }
+
+  if (msg.type === "undoAI" && typeof msg.id === "string") {
+    const root = store.root?.fsPath;
+    if (!root || !panel) return;
+    const { loadIndex } = await import("@novelpad/core");
+    const rec = loadIndex(root).snapshots.find((s) => s.id === msg.id);
+    if (!rec) {
+      void panel.webview.postMessage({ type: "undoResult", ok: false, message: "找不到这条记录" });
+      return;
+    }
+    // 确认一次：这是删除正文，误点代价太大
+    const ok = await vscode.window.showWarningMessage(
+      "撤销这次续写？只删 AI 写进来的段落，你自己改过的地方会保留。\n（撤销前的现状会先存一版，随时能回来）",
+      { modal: true },
+      "撤销",
+    );
+    if (ok !== "撤销") {
+      void panel.webview.postMessage({ type: "undoResult", ok: false, message: "已取消" });
+      return;
+    }
+
+    const r = await vscode.commands.executeCommand<{ ok: boolean; message: string }>(
+      "novelpad.version.undoAI",
+      rec.id,
+    );
+    if (r) void panel.webview.postMessage({ type: "undoResult", ok: r.ok, message: r.message });
+    await pushTimeline(store);
+    return;
+  }
 }
 
 /* ============================================================
@@ -274,7 +313,7 @@ function shell(wv: vscode.Webview): string {
 }
 * { box-sizing: border-box; margin: 0; }
 body { font-family: var(--vscode-font-family); font-size: 13px; color: var(--fg); background: var(--bg); height: 100vh; overflow: hidden; }
-.app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+.app { display: grid; grid-template-rows: auto auto 1fr; height: 100vh; }
 
 /* ---------- 顶部统计 ---------- */
 .head { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
@@ -305,8 +344,18 @@ body { font-family: var(--vscode-font-family); font-size: 13px; color: var(--fg)
 .item[data-kind=milestone] .dot { background: var(--vscode-gitDecoration-modifiedResourceForeground, #B7791F); width: 10px; height: 10px; left: 9.5px; }
 .item .fold { font-size: 11px; color: var(--faint); }
 .item .ai { font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--vscode-textCodeBlock-background); color: var(--accent); }
+/* AI 快照用青色竖线标记：作者一眼能看出「这段不是我自己写的」 */
+.item.ai-src::before { background: var(--accent); }
+.item.ai-src .dot { background: var(--accent); }
 .delta.up { color: var(--add); }
 .delta.down { color: var(--del); }
+
+/* ---------- 筛选栏 ---------- */
+.filters { display: flex; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.chip { font: inherit; font-size: 11.5px; padding: 2px 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+.chip:hover { color: var(--fg); border-color: var(--muted); }
+.chip.on { background: var(--btn); border-color: var(--btn); color: var(--btnFg); }
+.chip .c { opacity: .75; margin-left: 4px; font-variant-numeric: tabular-nums; }
 
 /* ---------- 详情 ---------- */
 .detail .ph { color: var(--muted); font-size: 12.5px; line-height: 1.9; padding-top: 30px; }
@@ -330,7 +379,16 @@ del { background: color-mix(in srgb, var(--del) 22%, transparent); border-radius
 .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.9; grid-column: 1 / -1; }
 .btn { font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--input); color: var(--fg); cursor: pointer; }
 .btn:hover { border-color: var(--accent); }
+.btn.danger { border-color: color-mix(in srgb, var(--del) 50%, var(--border)); color: var(--del); }
+.btn.danger:hover { border-color: var(--del); background: color-mix(in srgb, var(--del) 10%, transparent); }
 .err { color: var(--del); font-size: 12.5px; padding: 12px 0; }
+.ok { color: var(--add); font-size: 12.5px; padding: 8px 0; }
+
+/* ---------- 撤销这次续写 ---------- */
+.undo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding: 10px 12px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); }
+.undo-hint { font-size: 11.5px; color: var(--muted); }
+.undo-note { flex-basis: 100%; }
+.undo-note:empty { display: none; }
 </style></head><body>
 <div class="app">
   <div class="head">
@@ -339,6 +397,7 @@ del { background: color-mix(in srgb, var(--del) 22%, transparent); border-radius
     <div class="sub" id="sub">读取中…</div>
     <div class="nums" id="nums"></div>
   </div>
+  <div class="filters" id="filters" hidden></div>
   <div class="main" id="main">
     <div class="list" id="list"></div>
     <div class="detail" id="detail"></div>
@@ -349,6 +408,8 @@ const vscode = acquireVsCodeApi();
 const $ = (s) => document.querySelector(s);
 let DATA = null;
 let SEL = null;
+/** "" = 全部；"ai" = 只看 AI；"human" = 只看自己写的 */
+let FILTER = "";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -358,10 +419,46 @@ function num(n) {
   return (n > 0 ? "+" : "") + n.toLocaleString("zh-CN");
 }
 
+/** 当前筛选下应该显示的条目 */
+function visible() {
+  if (!DATA) return [];
+  if (FILTER === "ai") return DATA.items.filter((it) => it.byAI);
+  if (FILTER === "human") return DATA.items.filter((it) => !it.byAI);
+  return DATA.items;
+}
+
+function renderFilters() {
+  const el = $("#filters");
+  if (!DATA) { el.hidden = true; return; }
+  const aiCount = DATA.items.filter((it) => it.byAI).length;
+  // 没有 AI 记录时整条筛选栏都不出现——干净的时间线不该有装饰
+  if (!aiCount) { el.hidden = true; return; }
+
+  el.hidden = false;
+  const chip = (key, label, count) =>
+    '<button class="chip ' + (FILTER === key ? "on" : "") + '" data-f="' + key + '">' +
+    label + '<span class="c">' + count + "</span></button>";
+  el.innerHTML =
+    chip("", "全部", DATA.items.length) +
+    chip("ai", "只看 AI", aiCount) +
+    chip("human", "只看我写的", DATA.items.length - aiCount);
+
+  el.querySelectorAll(".chip").forEach((b) => {
+    b.onclick = () => { FILTER = b.dataset.f; renderFilters(); renderList(); };
+  });
+}
+
 function renderList() {
   const list = $("#list");
-  list.innerHTML = DATA.items.map((it) => {
-    const cls = ["item", SEL === it.id ? "on" : ""].join(" ");
+  const items = visible();
+  if (!items.length) {
+    list.innerHTML = '<div class="empty" style="padding:24px 16px">' +
+      (FILTER === "ai" ? "还没有 AI 续写的记录。" : FILTER === "human" ? "还没有你自己写的记录。" : "没有记录。") +
+      "</div>";
+    return;
+  }
+  list.innerHTML = items.map((it) => {
+    const cls = ["item", SEL === it.id ? "on" : "", it.byAI ? "ai-src" : ""].join(" ").trim();
     const d = it.delta ? '<span class="delta ' + (it.delta > 0 ? "up" : "down") + '">' + num(it.delta) + " 字</span>" : "";
     const fold = it.count > 1 ? '<span class="fold">' + it.count + " 次存档</span>" : "";
     const ai = it.byAI ? '<span class="ai">AI 续写</span>' : "";
@@ -401,6 +498,12 @@ window.addEventListener("message", (e) => {
     $("#main").innerHTML = '<div class="empty">' + esc(msg.reason) + "</div>";
     $("#sub").textContent = "";
     $("#nums").innerHTML = "";
+    $("#filters").hidden = true;
+    return;
+  }
+  if (msg.type === "setFilter") {
+    FILTER = msg.onlyAI ? "ai" : "";
+    if (DATA) { renderFilters(); renderList(); }
     return;
   }
   if (msg.type === "data") {
@@ -412,29 +515,63 @@ window.addEventListener("message", (e) => {
       '<div class="n"><b>' + msg.overview.publish + "</b>发布版</div>" +
       '<div class="n up"><b>' + num(msg.overview.weekDelta) + "</b>近 7 天净增</div>" +
       (msg.overview.lastWhen ? '<div class="n"><b style="font-size:13px">' + esc(msg.overview.lastWhen) + "</b>最近存档</div>" : "");
+    // 筛选状态在新数据到来时保留：作者正在「只看 AI」，刷新后不该跳回去
+    renderFilters();
     renderList();
     renderDetail();
     return;
   }
   if (msg.type === "diff") {
-    const s = msg.stats;
-    $("#detail").innerHTML =
-      "<h2>" + esc(msg.prevWhen ? "对比 " + msg.prevWhen + " 的版本" : "这一版的完整内容") + "</h2>" +
-      '<div class="file">' + esc(msg.file) + "</div>" +
-      '<div class="stat">' +
-        "<span>新增 <b>" + s.added + "</b> 段</span>" +
-        "<span>删除 <b>" + s.removed + "</b> 段</span>" +
-        "<span>修改 <b>" + s.changed + "</b> 段</span>" +
-        "<span>字数 <b style='color:var(--add)'>+" + s.wordsAdded + "</b> / <b style='color:var(--del)'>-" + s.wordsRemoved + "</b></span>" +
-      "</div>" +
-      (msg.blocks.length ? msg.blocks.map(blockHtml).join("") : '<div class="ph">这一版与上一版没有文字差异。</div>');
+    renderDiff(msg);
     return;
   }
   if (msg.type === "diffError") {
     $("#detail").innerHTML = '<div class="err">' + esc(msg.message) + "</div>";
     return;
   }
+  if (msg.type === "undoResult") {
+    const note = $(".undo-note");
+    if (note) {
+      note.className = "undo-note " + (msg.ok ? "ok" : "err");
+      note.textContent = msg.message;
+    }
+    return;
+  }
 });
+
+/** 这一版是不是 AI 引入的（按钮只在这时出现） */
+function recById(id) {
+  return DATA && DATA.items.find((it) => it.id === id);
+}
+
+function renderDiff(msg) {
+  const s = msg.stats;
+  const it = recById(msg.id);
+  const canUndo = it && it.byAI;
+
+  $("#detail").innerHTML =
+    "<h2>" + esc(msg.prevWhen ? "对比 " + msg.prevWhen + " 的版本" : "这一版的完整内容") + "</h2>" +
+    '<div class="file">' + esc(msg.file) + "</div>" +
+    '<div class="stat">' +
+      "<span>新增 <b>" + s.added + "</b> 段</span>" +
+      "<span>删除 <b>" + s.removed + "</b> 段</span>" +
+      "<span>修改 <b>" + s.changed + "</b> 段</span>" +
+      "<span>字数 <b style='color:var(--add)'>+" + s.wordsAdded + "</b> / <b style='color:var(--del)'>-" + s.wordsRemoved + "</b></span>" +
+    "</div>" +
+    (canUndo
+      ? '<div class="undo"><button class="btn danger" id="undo">撤销这次续写</button>' +
+        '<span class="undo-hint">只删 AI 写进来的段落，你自己改过的地方会保留</span>' +
+        '<div class="undo-note"></div></div>'
+      : "") +
+    (msg.blocks.length ? msg.blocks.map(blockHtml).join("") : '<div class="ph">这一版与上一版没有文字差异。</div>');
+
+  const btn = $("#undo");
+  if (btn) btn.onclick = () => {
+    btn.disabled = true;
+    btn.textContent = "正在撤销…";
+    vscode.postMessage({ type: "undoAI", id: msg.id });
+  };
+}
 
 $("#mk").onclick = () => vscode.postMessage({ type: "milestone" });
 vscode.postMessage({ type: "ready" });

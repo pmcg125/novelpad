@@ -16,7 +16,7 @@ import { AnnotationsFeature } from "./features/annotations";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
-import { openTimeline, refreshTimeline } from "./views/timeline";
+import { openTimeline, openTimelineAIOnly, refreshTimeline } from "./views/timeline";
 import { BranchManager, listMergeableBranches } from "./features/branches";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -35,8 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
     ...registerFocusMode(),
   );
 
+  // 版本管理：自动存档 + 时间线。
+  // 必须在 Copilot 之前建好——续写/改写要往里塞 AI 来源标记，
+  // 否则那些快照在时间线上看起来和作者自己写的一样。
+  const version = new VersionManager(store);
+  version.start();
+
   // Novel Copilot
-  const copilot = registerCopilot(context, store);
+  const copilot = registerCopilot(context, store, version);
 
   // RAG + 决策模型（注入 Copilot）
   registerRagAndDecision(context, store, copilot.continuation);
@@ -49,8 +55,6 @@ export function activate(context: vscode.ExtensionContext): void {
   store.onDidChange(() => refreshGraph());
 
   // 版本管理：自动存档 + 时间线
-  const version = new VersionManager(store);
-  version.start();
   context.subscriptions.push(
     version,
     vscode.commands.registerCommand("novelpad.timeline", () => openTimeline(store)),
@@ -73,6 +77,50 @@ export function activate(context: vscode.ExtensionContext): void {
       await version.flush("manual");
       refreshTimeline();
       void vscode.window.showInformationMessage("已存档");
+    }),
+    // 「只看 AI 改过的地方」：打开时间线并直接切筛选
+    vscode.commands.registerCommand("novelpad.version.aiOnly", () => {
+      if (!store.root) return void vscode.window.showWarningMessage("请先打开一个作品");
+      openTimelineAIOnly(store);
+    }),
+    // AI 分账（§5.3）：「撤销这次续写」按段落把 AI 写进来的删掉
+    vscode.commands.registerCommand("novelpad.version.undoAI", async (id?: string) => {
+      if (!store.root) return { ok: false, message: "没有打开作品" };
+      const { loadIndex } = await import("@novelpad/core");
+      const idx = loadIndex(store.root.fsPath);
+      const aiRecords = idx.snapshots.filter((s) => s.origin.kind === "ai");
+      type Rec = (typeof aiRecords)[number];
+
+      if (!aiRecords.length) {
+        void vscode.window.showInformationMessage("还没有 AI 续写的记录");
+        return { ok: false, message: "没有 AI 记录" };
+      }
+
+      // 带了 id 就直接撤（时间线点按钮进来）；否则让作者选一条
+      const target: Rec | undefined = id
+        ? aiRecords.find((s) => s.id === id)
+        : aiRecords.length === 1
+          ? aiRecords[0]
+          : undefined;
+
+      if (!target && !id) {
+        const pick = await vscode.window.showQuickPick(
+          aiRecords
+            .slice()
+            .sort((a, b) => (a.time < b.time ? 1 : -1))
+            .map((s) => ({
+              label: `$(${s.kind === "milestone" ? "flag" : "history"}) ${s.label ?? s.chapter ?? "自动存档"}`,
+              description: new Date(s.time).toLocaleString("zh-CN") + (s.words?.delta ? ` · ${s.words.delta > 0 ? "+" : ""}${s.words.delta} 字` : ""),
+              rec: s,
+            })),
+          { placeHolder: "撤销哪一次 AI 续写？" },
+        );
+        if (!pick) return { ok: false, message: "已取消" };
+        return version.undoAI(pick.rec);
+      }
+
+      if (!target) return { ok: false, message: "找不到这条 AI 记录" };
+      return version.undoAI(target);
     }),
   );
   store.onDidChange(() => refreshTimeline());

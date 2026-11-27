@@ -7,6 +7,7 @@ import type { ProjectStore } from "../store";
 import type { CopilotConfig } from "./config";
 import { CopilotPrompt, setLastReasoning } from "./continue";
 import { showReasoning, type ReasoningEntry } from "./reasoning";
+import type { VersionManager } from "../features/version";
 
 function emptyContext(doc: vscode.TextDocument): AssembledContext {
   return {
@@ -30,6 +31,7 @@ export class EditActions implements vscode.Disposable {
   constructor(
     private readonly store: ProjectStore,
     private readonly config: CopilotConfig,
+    private readonly version?: VersionManager,
   ) {
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
     this.status.tooltip = "Novel Copilot 正在改写";
@@ -101,6 +103,8 @@ export class EditActions implements vscode.Disposable {
         const edit = new vscode.WorkspaceEdit();
         edit.replace(doc.uri, range, r.rewritten);
         await vscode.workspace.applyEdit(edit);
+        // 版本管理据此把这条快照标成 AI 引入，时间线可「撤销这次改写」
+        this.version?.markAI(doc.uri, { model: this.config.read().editModel });
       } else if (decision === false) {
         await this.run(uri, range, action);
       }
