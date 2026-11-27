@@ -21,23 +21,20 @@ const extDir = path.join(appDir, "extensions", "novelpad");
 fs.rmSync(extDir, { recursive: true, force: true });
 fs.mkdirSync(extDir, { recursive: true });
 
-// vsix 就是 zip；用 PowerShell Expand-Archive 兼容 Windows runner，否则用 unzip
-if (process.platform === "win32") {
-  const tmp = path.join(path.dirname(vsix), ".vsix-extract");
-  fs.rmSync(tmp, { recursive: true, force: true });
-  fs.mkdirSync(tmp, { recursive: true });
-  const zip = path.join(tmp, "e.zip");
-  fs.copyFileSync(vsix, zip);
-  execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -Path '${zip}' -DestinationPath '${tmp}' -Force`], { stdio: "inherit" });
-  // vsix 内 extension/ 目录才是扩展本体
-  const inner = path.join(tmp, "extension");
-  fs.cpSync(inner, extDir, { recursive: true });
-  fs.rmSync(tmp, { recursive: true, force: true });
-} else {
-  fs.mkdirSync("/tmp/np-vsix", { recursive: true });
-  execFileSync("unzip", ["-o", "-q", vsix, "-d", "/tmp/np-vsix"], { stdio: "inherit" });
-  fs.cpSync("/tmp/np-vsix/extension", extDir, { recursive: true });
+// vsix 就是 zip。用 bsdtar 解（Windows 10+/Server 2022 自带，Linux/mac 也有）；
+// 不能用 PowerShell 5.1 的 Expand-Archive：其内部 .NET 重载在 runner 上不存在
+const tmp = path.join(path.dirname(path.resolve(vsix)), ".vsix-extract");
+fs.rmSync(tmp, { recursive: true, force: true });
+fs.mkdirSync(tmp, { recursive: true });
+execFileSync("tar", ["-xf", path.resolve(vsix), "-C", tmp], { stdio: "inherit" });
+// vsix 内 extension/ 目录才是扩展本体
+const inner = path.join(tmp, "extension");
+if (!fs.existsSync(inner)) {
+  console.error(`vsix 里没有 extension/ 目录：${tmp}`);
+  process.exit(3);
 }
+fs.cpSync(inner, extDir, { recursive: true });
+fs.rmSync(tmp, { recursive: true, force: true });
 
 // 注册为内置扩展：追加到 product.json 的 builtInExtensions
 const productPath = path.join(appDir, "product.json");

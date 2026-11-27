@@ -13,6 +13,10 @@ on:
       platform:
         description: "构建平台（all / win32 / linux / darwin）"
         default: "all"
+      gulpBuild:
+        description: "是否执行 gulp 编译（false = 只验证打包链路，很快）"
+        type: boolean
+        default: true
 
 jobs:
   prepare:
@@ -132,6 +136,7 @@ jobs:
         with: { python-version: "3.11" }
 
       - name: 安装依赖
+        if: inputs.gulpBuild != false
         working-directory: upstream
         shell: bash
         env:
@@ -142,9 +147,19 @@ jobs:
           ${{ steps.pm.outputs.install }}
 
       - name: 构建（gulp ${{ matrix.gulp }}）
+        if: inputs.gulpBuild != false
         working-directory: upstream
         shell: bash
         run: npx gulp ${{ matrix.gulp }}
+
+      # 跳过真实编译时（gulpBuild=false），造一个最小目录，只验证 embed + 打包链路
+      - name: 造占位产物（仅 gulpBuild=false）
+        if: inputs.gulpBuild == false
+        shell: bash
+        run: |
+          mkdir -p "${{ matrix.out }}/resources/app/extensions"
+          echo '{"nameShort":"NovelPad","nameLong":"NovelPad","builtInExtensions":[]}' > "${{ matrix.out }}/resources/app/product.json"
+          echo '{"name":"code-oss","version":"1.85.0","main":"./out/main.js"}' > "${{ matrix.out }}/resources/app/package.json"
 
       - name: 定位产物目录
         id: out

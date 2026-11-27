@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["opencode-qoder-bridge"],
+  "providers": {
+    "qoder": {
+      "settings": {
+        "sessionPersistence": true,
+        "sessionKey": "novelpad",
+        "env": {
+          "QODER_REGION": "cn",
+          "QODER_AUTH_MODE": "browser"
+        }
+      }
+    }
+  }
+}
