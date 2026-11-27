@@ -9,6 +9,7 @@
  *   merge.ts     章节级合并（分工合写，不做文本自动合并）
  *   branch.ts    支线分支 / worktree 的 git 层
  *   ai.ts        AI 分账（只删 AI 写进来的段落）
+ *   remote.ts    托管：推送 / 拉取 / 远端管理
  */
 export * from "./repo.js";
 export * from "./layout.js";
@@ -19,3 +20,4 @@ export * from "./annotations-store.js";
 export * from "./merge.js";
 export * from "./branch.js";
 export * from "./ai.js";
+export * from "./remote.js";
