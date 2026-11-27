@@ -17,7 +17,16 @@ import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
 import { openTimeline, openTimelineAIOnly, refreshTimeline } from "./views/timeline";
+import { closeStudioIfIdle, isStudioOpen, maybeOpenStudio, openStudio, refreshStudio } from "./views/studio";
 import { BranchManager, listMergeableBranches } from "./features/branches";
+import {
+  HostStatusBar,
+  backup,
+  connectInteractive,
+  describeStatus,
+  restore,
+  status as hostStatus,
+} from "./features/host";
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
@@ -202,6 +211,60 @@ export function activate(context: vscode.ExtensionContext): void {
   annotations.attachBadge(annotationTree);
   context.subscriptions.push(output, annotations, annotationTree);
 
+  // 书房（L5）：替代 Welcome 页。只在没有编辑器时出现。
+  context.subscriptions.push(
+    vscode.commands.registerCommand("novelpad.studio", () => openStudio(context, store)),
+    vscode.commands.registerCommand("novelpad.studio.close", () => {
+      if (isStudioOpen()) void vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    }),
+  );
+  // 一旦作者打开正文，书房就该让位——它不是挡在稿子前面的一个标签页
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(() => closeStudioIfIdle()),
+  );
+
+  // 托管（V5）：作者全程不输入 git 命令
+  const hostBar = new HostStatusBar(store, context.secrets);
+  hostBar.start();
+  context.subscriptions.push(
+    hostBar,
+    vscode.commands.registerCommand("novelpad.host.connect", () => connectInteractive(store, context.secrets)),
+    vscode.commands.registerCommand("novelpad.host.push", async () => {
+      const r = await backup(store, context.secrets);
+      if (r.ok) void vscode.window.showInformationMessage(r.message);
+      else void vscode.window.showWarningMessage(r.message);
+      await hostBar.refresh();
+    }),
+    vscode.commands.registerCommand("novelpad.host.pull", async () => {
+      const r = await restore(store, context.secrets);
+      if (r.ok) void vscode.window.showInformationMessage(r.message);
+      else void vscode.window.showErrorMessage(r.message);
+      await hostBar.refresh();
+    }),
+    vscode.commands.registerCommand("novelpad.host.status", async () => {
+      const s = await hostStatus(store, context.secrets);
+      if (!s.connected) {
+        const act = await vscode.window.showInformationMessage(
+          "这部作品还没做云端备份。连接之后，换电脑也能接着写。",
+          "连接到 GitHub",
+          "稍后",
+        );
+        if (act === "连接到 GitHub") await connectInteractive(store, context.secrets);
+        await hostBar.refresh();
+        return;
+      }
+      const p = s.preview;
+      const lines = [
+        `地址：${s.remote?.displayUrl ?? ""}`,
+        `状态：${describeStatus(s)}`,
+      ];
+      if (p?.dirty) lines.push("有未提交的改动（点「备份到云端」会先自动存一版）");
+      const act = await vscode.window.showInformationMessage(lines.join("\n"), { modal: true }, "备份到云端", "从云端取回");
+      if (act === "备份到云端") await vscode.commands.executeCommand("novelpad.host.push");
+      if (act === "从云端取回") await vscode.commands.executeCommand("novelpad.host.pull");
+    }),
+  );
+
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   status.command = "novelpad.stats";
@@ -224,6 +287,7 @@ export function activate(context: vscode.ExtensionContext): void {
     chapters.refresh();
     entities.refresh();
     updateStatus();
+    refreshStudio();
     if (store.project) void linter.run();
   });
 
@@ -244,7 +308,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  void store.refresh().then(() => store.startWatching());
+  void store.refresh().then(() => {
+    store.startWatching();
+    // 刷新完成后再判断：作品名与字数要能立刻显示在书房首页上
+    maybeOpenStudio(context, store);
+  });
 }
 
 export function deactivate(): void {

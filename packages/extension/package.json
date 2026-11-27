@@ -24,7 +24,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "workspaceContains:.novelpad",
-    "workspaceContains:chapters"
+    "workspaceContains:chapters",
+    "onStartupFinished"
   ],
   "contributes": {
     "viewsContainers": {
@@ -336,6 +337,36 @@
         "title": "NovelPad: 只看 AI 改过的地方",
         "category": "NovelPad",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "novelpad.studio",
+        "title": "NovelPad: 回到书房",
+        "category": "NovelPad",
+        "icon": "$(home)"
+      },
+      {
+        "command": "novelpad.host.connect",
+        "title": "NovelPad: 连接到 GitHub",
+        "category": "NovelPad",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "novelpad.host.push",
+        "title": "NovelPad: 备份到云端",
+        "category": "NovelPad",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "novelpad.host.pull",
+        "title": "NovelPad: 从云端取回",
+        "category": "NovelPad",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "novelpad.host.status",
+        "title": "NovelPad: 托管状态",
+        "category": "NovelPad",
+        "icon": "$(cloud)"
       }
     ],
     "menus": {
@@ -419,6 +450,11 @@
           "command": "novelpad.branch.open",
           "when": "view == novelpad.chapters",
           "group": "2_branch@2"
+        },
+        {
+          "command": "novelpad.studio",
+          "when": "view == novelpad.chapters",
+          "group": "navigation@9"
         }
       ],
       "view/item/context": [
@@ -722,6 +758,31 @@
           ],
           "default": "decision-model",
           "description": "决策模型。"
+        },
+        "novelpad.studio.dailyTarget": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 100,
+          "description": "书房首页的每日字数目标。达标后进度环变色。",
+          "scope": "window"
+        },
+        "novelpad.openStudioOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "启动时若没有打开任何文件，显示书房首页（代替 VS Code 的欢迎页）。",
+          "scope": "window"
+        },
+        "novelpad.host.remote": {
+          "type": "string",
+          "default": "origin",
+          "description": "托管使用的远端名。默认 origin，一般不用改。",
+          "scope": "window"
+        },
+        "novelpad.host.autoPush": {
+          "type": "boolean",
+          "default": false,
+          "description": "每次存档后自动推送到云端。网络不稳或流量有限时保持关闭。",
+          "scope": "window"
         }
       }
     },
@@ -760,6 +821,11 @@
         "command": "novelpad.branch.open",
         "key": "alt+shift+m",
         "when": "editorLangId == markdown"
+      },
+      {
+        "command": "novelpad.studio",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h"
       }
     ],
     "markdown.previewStyles": [
