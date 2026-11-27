@@ -10,6 +10,7 @@ import { registerLanguageFeatures } from "./features/language";
 import { registerCommands } from "./commands";
 import { registerFocusMode } from "./features/focus";
 import { VersionManager } from "./features/version";
+import { ProseDecorator } from "./features/typeset";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
@@ -72,6 +73,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
   store.onDidChange(() => refreshTimeline());
+
+  // L4 装饰级排版：只在作品内的 Markdown 生效，纯视觉，不碰正文
+  context.subscriptions.push(new ProseDecorator(store));
 
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

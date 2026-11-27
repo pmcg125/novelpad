@@ -381,6 +381,31 @@
           "default": true,
           "description": "在状态栏显示当前章节字数与全书字数。"
         },
+        "novelpad.typeset.headingBand": {
+          "type": "boolean",
+          "default": true,
+          "description": "给章节标题行加一层暖色底纹，让「新的一章开始了」在长文中一眼可见。只加底色，不改字号（改字号会让光标定位偏移）。高对比度主题下自动不启用。"
+        },
+        "novelpad.typeset.sceneBreak": {
+          "type": "boolean",
+          "default": true,
+          "description": "把单独成行的 `***` / `---` / `___` 显示成空白，看起来像场景切换的留白。源码里的星号仍在，可点可改可复制。"
+        },
+        "novelpad.typeset.dimComments": {
+          "type": "boolean",
+          "default": true,
+          "description": "把 `<!-- 备注 -->` 显示成淡色，一眼区分「这是草稿批注，不是正文」。"
+        },
+        "novelpad.typeset.wikiLinks": {
+          "type": "boolean",
+          "default": true,
+          "description": "给双链 `[[角色]]` 加链接色与虚线下划线。只着色，不改内容。"
+        },
+        "novelpad.typeset.firstLineIndent": {
+          "type": "boolean",
+          "default": false,
+          "description": "段首缩进 2em。**默认关闭**：它靠 CSS 改变文字实际位置，而编辑器的光标定位按字符宽度累加计算，不知道这段缩进——开启后每段首行的光标、选区、点击定位都会左偏 2em。段首缩进建议留给导出（导出本就带缩进）。"
+        },
         "novelpad.copilot.enabled": {
           "type": "boolean",
           "default": true,

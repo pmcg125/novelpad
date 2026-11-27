@@ -156,7 +156,9 @@
     "settings.focusedRowBackground": "#242923",
     "quickInput.background": "#26241F",
     "quickInput.foreground": "#CFC8BA",
-    "quickInputList.focusBackground": "#242923"
+    "quickInputList.focusBackground": "#242923",
+    "disabledForeground": "#7E7770",
+    "textLink.foreground": "#5CB8A6"
   },
   "tokenColors": [
     {
