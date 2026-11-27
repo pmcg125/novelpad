@@ -2,6 +2,19 @@
    设定页：角色卡编辑器（表单 ↔ YAML）
    ============================================================ */
 
+/* 本页是三栏（无 Copilot 面板），必须自己声明模板。
+   原先 lore.html 借用了 graph.css 的 .app.full——那份只有 graph.html 加载，
+   lore.html 并不加载，于是退回 mockup.css 的四栏模板，
+   而 .lore-stage 的 grid-area: main 在四栏模板里不存在，整页被自动放置打乱。 */
+.app.full {
+  grid-template-columns: 48px 260px minmax(0, 1fr);
+  grid-template-areas:
+    "activity sidebar tabs"
+    "activity sidebar main"
+    "status   status   status";
+}
+.app.full .tabs { border-bottom: 1px solid var(--border); }
+
 .lore-stage {
   grid-area: main;
   display: grid;

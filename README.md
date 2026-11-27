@@ -12,7 +12,20 @@
 
 - [开发计划](docs/PLAN.md)
 - [设计语言](docs/DESIGN.md)
+- [界面定制方案](docs/PLAN-UI.md) / [版本管理方案](docs/PLAN-VERSIONING.md)
 - 效果图：`docs/design/mockups/`（浏览器直接打开）
+
+## 界面预览
+
+| 写作台 · 宣纸 | 写作台 · 夜墨 |
+|---|---|
+| ![写作台 宣纸](docs/design/preview/studio-light.png) | ![写作台 夜墨](docs/design/preview/studio-dark.png) |
+
+| 源码 / 渲染对比 | 设定卡编辑器 |
+|---|---|
+| ![对比](docs/design/preview/compare.png) | ![设定卡](docs/design/preview/lore.png) |
+
+![关系云图](docs/design/preview/graph.png)
 
 ## 开发
 
@@ -86,7 +99,10 @@ shell/         VS Code 源码定制层（M6 启用）
 - [x] M3 Novel Copilot：续写 / 改写 / 设定问答 / 角色卡草稿；推理过程可见、小说家式思考
 - [x] M4 RAG + 决策：Embedding + 向量索引 + Rerank；decision-model 正文审查 / 续写前预判 / 冲突裁决
 - [x] M5 图谱：关系云图（力导向、类型/关系着色、章节范围、详情面板）+ 剧情发展链（泳道时间线、伏笔开合因果）
-- [ ] M6 壳（源码定制）
+- [x] M6 壳（源码定制）：薄定制层 + 两个补丁 + 确定性品牌图标
+- [ ] M7 主界面深度定制（进行中）
+- [ ] M8 版本管理与共创
+- [ ] M9 发布
 
 ## 图谱
 
@@ -110,5 +126,3 @@ shell/         VS Code 源码定制层（M6 启用）
 | 裁决冲突 | 选中含多版本的冲突文本 → 「决策模型裁决选中冲突」 | 解析版本与来源 → 概率表 + 置信度 + 是否可直接定稿 |
 
 `examples/cannian/` 是一套真实的 OC / 世界观语料（17 份文档、引用溯源、48 项冲突清单），用于验证检索与裁决质量。
-- [ ] M5 图谱
-- [ ] M6 壳（源码定制）
