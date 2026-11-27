@@ -11,9 +11,14 @@ import path from "node:path";
 /**
  * 检查一个已解包的扩展目录是否可用。
  * @param {string} extDir 扩展根目录
+ * @param {{ requireBuiltEntry?: boolean }} [opts]
+ *   requireBuiltEntry: 是否要求 `main` 指向的文件**当前已存在**。
+ *   默认 true——校验的是「装进 app 的那个扩展」。
+ *   源码仓库里 dist/ 还没构建时传 false：此时只能验声明，不能验产物。
  * @returns {string[]} 问题列表；空数组表示通过
  */
-export function validateExtensionManifest(extDir) {
+export function validateExtensionManifest(extDir, opts = {}) {
+  const requireBuiltEntry = opts.requireBuiltEntry !== false;
   const pkgPath = path.join(extDir, "package.json");
   if (!fs.existsSync(pkgPath)) return [`缺 package.json：${pkgPath}`];
 
@@ -39,7 +44,11 @@ export function validateExtensionManifest(extDir) {
     const declarativeOnly =
       !pkg.contributes?.commands?.length && !pkg.activationEvents?.length && !pkg.contributes?.configuration;
     if (!declarativeOnly) problems.push("缺 main（有命令/激活事件但无入口，全部命令都会「未找到」）");
-  } else if (!fs.existsSync(path.join(extDir, pkg.main))) {
+  } else if (requireBuiltEntry && !fs.existsSync(path.join(extDir, pkg.main))) {
+    // 这一条只能对**打包后的**目录成立。
+    // 对源码仓库跑会误报：dist/ 还没构建时 main 当然不存在，
+    // 而 patch-check 刻意不编译。声明层的错该在这里拦，
+    // 产物缺失的错该在真正打包时拦（verify-embed 的发布版检查）。
     problems.push(`main 指向不存在的文件：${pkg.main}`);
   }
 

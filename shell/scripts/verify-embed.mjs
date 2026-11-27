@@ -230,19 +230,59 @@ function buildZip(files) {
 
 /* ============================================================
  * 3. 仓库里真实的扩展 manifest 必须能过
+ *
+ * 注意 requireBuiltEntry: false —— 这里验的是**源码声明**。
+ * patch-check 刻意不编译，dist/ 不存在是正常的；
+ * 要求它存在会把「没编译」误报成「manifest 坏了」。
+ * 产物是否存在，由下面第 4 节单独验。
  * ============================================================ */
 
 {
   const extPkg = path.join(here, "../../packages/extension/package.json");
   const extDir = path.dirname(extPkg);
   if (fs.existsSync(extPkg)) {
-    const problems = validateExtensionManifest(extDir);
-    check("packages/extension 的 manifest 合法", problems.length === 0, problems.join("；"));
+    const problems = validateExtensionManifest(extDir, { requireBuiltEntry: false });
+    check("packages/extension 的 manifest 合法（源码声明层）", problems.length === 0, problems.join("；"));
     const pkg = JSON.parse(fs.readFileSync(extPkg, "utf8"));
     check("扩展带 publisher（不装也能算出正确扩展 ID）", Boolean(pkg.publisher), String(pkg.publisher));
+    check("扩展声明了入口 main", Boolean(pkg.main), String(pkg.main));
   } else {
     check("找到 packages/extension/package.json", false, extPkg);
   }
+}
+
+/* ============================================================
+ * 4. main 缺失这条规则必须仍然生效（防止上面传了 false 就形同虚设）
+ * ============================================================ */
+
+{
+  const dir = path.join(tmpRoot, "nomain");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({
+      name: "x",
+      version: "1.0.0",
+      publisher: "p",
+      engines: { vscode: "^1.85.0" },
+      main: "./dist/extension.js",
+      activates: [],
+      contributes: { commands: [{ command: "x.y", title: "y" }] },
+    }),
+  );
+
+  // 默认（校验打包产物）：main 指向不存在的文件 → 必须报错
+  const built = validateExtensionManifest(dir);
+  check("校验产物时拦截 main 指向不存在的文件", built.some((x) => x.includes("main 指向不存在的文件")), built.join("；"));
+
+  // 源码声明层：只验声明，不验产物
+  const src = validateExtensionManifest(dir, { requireBuiltEntry: false });
+  check("源码声明层不因未构建而误报", src.length === 0, src.join("；"));
+
+  // 产物存在后，默认校验应通过
+  fs.mkdirSync(path.join(dir, "dist"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "dist/extension.js"), "// built\n");
+  check("产物就位后默认校验通过", validateExtensionManifest(dir).length === 0, validateExtensionManifest(dir).join("；"));
 }
 
 fs.rmSync(tmpRoot, { recursive: true, force: true });
