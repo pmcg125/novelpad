@@ -5,9 +5,11 @@
  *   snapshot.ts  三类快照的建/读/清理 + 本地索引
  *   diff.ts      段落级 + 字级 diff
  *   annotate.ts  批注锚定与四级退让
+ *   annotations-store.ts  批注落盘（.novelpad/annotations.jsonl）
  */
 export * from "./repo.js";
 export * from "./layout.js";
 export * from "./snapshot.js";
 export * from "./diff.js";
 export * from "./annotate.js";
+export * from "./annotations-store.js";

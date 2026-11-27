@@ -2,6 +2,7 @@
  * NovelPad 扩展入口
  */
 import * as vscode from "vscode";
+import { execFileSync } from "node:child_process";
 import { ProjectStore } from "./store";
 import { ChaptersProvider } from "./views/chapters";
 import { EntitiesProvider } from "./views/entities";
@@ -11,6 +12,7 @@ import { registerCommands } from "./commands";
 import { registerFocusMode } from "./features/focus";
 import { VersionManager } from "./features/version";
 import { ProseDecorator } from "./features/typeset";
+import { AnnotationsFeature } from "./features/annotations";
 import { registerCopilot } from "./copilot";
 import { registerRagAndDecision } from "./decision";
 import { openGraph, refreshGraph } from "./views/graph";
@@ -77,6 +79,29 @@ export function activate(context: vscode.ExtensionContext): void {
   // L4 装饰级排版：只在作品内的 Markdown 生效，纯视觉，不碰正文
   context.subscriptions.push(new ProseDecorator(store));
 
+  // 编辑批注（共创 A）：波浪线 + 悬停线程 + 建议一键接受
+  let authorCache: { id: string; name: string } | undefined;
+  const output = vscode.window.createOutputChannel("NovelPad");
+  const annotations = new AnnotationsFeature(
+    store,
+    () => {
+      // 没账号体系，用 git 配置里的邮箱当身份；拿不到就是 local。
+      // 每次调用都起一次 git 子进程，所以缓存在闭包里。
+      if (!authorCache) {
+        const email = gitEmail();
+        authorCache = email ? { id: email, name: email } : { id: "local", name: "我" };
+      }
+      return authorCache;
+    },
+    output,
+  );
+  const annotationTree = vscode.window.createTreeView("novelpad.annotations", {
+    treeDataProvider: annotations.treeProvider(),
+    showCollapseAll: true,
+  });
+  annotations.attachBadge(annotationTree);
+  context.subscriptions.push(output, annotations, annotationTree);
+
   // 状态栏：当前章节字数 / 全书字数
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   status.command = "novelpad.stats";
@@ -124,4 +149,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   /* subscriptions 自动 dispose */
+}
+
+/**
+ * 从 git 配置里取作者邮箱，用作批注身份。
+ *
+ * 没有账号体系是有意的：计划里明确「编辑只需 clone 仓库、用 NovelPad 打开，
+ * 不需要账号、不需要服务器」。邮箱只用来在多人批注里区分是谁写的。
+ */
+function gitEmail(): string | undefined {
+  try {
+    const out = execFileSync("git", ["config", "user.email"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    }).trim();
+    return out || undefined;
+  } catch {
+    return undefined;
+  }
 }
