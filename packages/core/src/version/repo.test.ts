@@ -446,3 +446,44 @@ describe("deleteRef", () => {
     expect(st.refs.size).toBe(2);
   });
 });
+
+describe("提交身份兜底", () => {
+  /**
+   * 小说作者没配过 git 是常态——他可能从没用过 git，仓库是我们
+   * 静默初始化的。没有身份时 commit-tree 会失败，于是**每次自动存档
+   * 都失败**，作者看不到提示，30 分钟后时间线还是一片空白。
+   * 这条用例钉住那个兜底，防止它被当成多余代码删掉。
+   */
+  it("commit-tree 显式带上身份，不依赖作者的 git 配置", async () => {
+    const envs: (Record<string, string> | undefined)[] = [];
+    const { exec: inner } = makeFakeGit();
+    const spy: ExecFn = async (args, opts) => {
+      if (args[0] === "commit-tree") envs.push(opts.env);
+      return inner(args, opts);
+    };
+
+    const r = await createSnapshot(spy, "/repo", { message: "m", parent: "none" });
+    expect(r.ok).toBe(true);
+    expect(envs).toHaveLength(1);
+    expect(envs[0]).toMatchObject({
+      GIT_AUTHOR_NAME: expect.any(String),
+      GIT_AUTHOR_EMAIL: expect.any(String),
+      GIT_COMMITTER_NAME: expect.any(String),
+      GIT_COMMITTER_EMAIL: expect.any(String),
+    });
+    // 身份只进这一次子进程，不写进仓库配置
+    expect(envs[0]?.GIT_AUTHOR_EMAIL).not.toBe("");
+  });
+
+  it("身份不通过 -c 前缀传（否则 args[0] 不再是子命令）", async () => {
+    const calls: readonly string[][] = [];
+    const { exec: inner, st } = makeFakeGit();
+    const spy: ExecFn = async (args, opts) => {
+      (calls as string[][]).push([...args]);
+      return inner(args, opts);
+    };
+    await createSnapshot(spy, "/repo", { message: "m", parent: "none" });
+    expect(st.calls.every((c) => c[0] !== "-c")).toBe(true);
+    expect((calls as string[][]).some((c) => c[0] === "commit-tree")).toBe(true);
+  });
+});

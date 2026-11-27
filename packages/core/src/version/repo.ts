@@ -149,6 +149,17 @@ export interface SnapshotInput {
    * 自动存档是独立根提交，没有父可比，所以要显式指定「上一版」。
    */
   dedupeAgainst?: string;
+  /**
+   * 树的基底提交：先读入它的整棵树，再叠加本次 `paths` 的改动。
+   *
+   * 不传 = 从空树起步，写出的树**只含本次 paths**。这是自动存档要的
+   * 语义（一个快照 = 某一章的部分快照，滚动清理时才不会连带别的章节）。
+   *
+   * 但「在已有分支上追加一次提交」必须传它。否则写出的树只剩本次路径，
+   * 分支上其他所有文件会凭空消失——不是「没合并进来」，是**被删掉**。
+   * 合并、以及在一条连续历史上追加任何提交，都要传 base。
+   */
+  base?: string;
 }
 
 export interface SnapshotResult {
@@ -176,8 +187,6 @@ export async function createSnapshot(exec: ExecFn, root: string, input: Snapshot
   // 2. 不污染作者：往真实索引 `git add` 会改变他的 `git status`，
   //    甚至把半成品塞进他准备提交的内容里。工具不该动用户的暂存区。
   // 3. 可并发：临时索引是独立文件，不会和用户或其他窗口抢 index.lock。
-  //
-  // `read-tree --empty` 从空树开始，所以快照只含本次 add 进来的路径。
   const tmpIndex = path.join(
     os.tmpdir(),
     `novelpad-index-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -192,9 +201,20 @@ export async function createSnapshot(exec: ExecFn, root: string, input: Snapshot
   };
 
   try {
-    // 1) 空索引 → 暂存（-A 让删除也被记录）
-    const reset = await exec(["read-tree", "--empty"], { cwd: root, env });
-    if (reset.code !== 0) return { ok: false, error: reset.stderr.trim() || "git read-tree 失败" };
+    // 1) 索引起点。
+    //
+    // 有 base → 读入它的整棵树，本次 paths 的改动**叠加**在上面。
+    // 无 base → 从空树起步，写出的树只含本次 paths（自动存档的部分快照语义）。
+    //
+    // 这个区别不是细节：在已有分支上追加提交却不带 base，写出的树
+    // 只剩本次那几个文件，分支上其余的章节和设定会**从历史里消失**。
+    // 实测过：合并一章后，`ls-tree` 只剩合并进来的那一章。
+    const reset = input.base
+      ? await exec(["read-tree", input.base], { cwd: root, env })
+      : await exec(["read-tree", "--empty"], { cwd: root, env });
+    if (reset.code !== 0) {
+      return { ok: false, error: reset.stderr.trim() || `git read-tree 失败（base=${input.base ?? "(empty)"}）` };
+    }
 
     const add = await exec(["add", "-A", "--", ...paths], { cwd: root, env });
     if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "git add 失败" };
@@ -237,9 +257,25 @@ async function finishSnapshot(
   }
 
   // 5) 造提交对象
+  //
+  // 身份兜底：`commit-tree` 要求 user.name / user.email，而**小说作者
+  // 没配过 git 是常态**——他可能从没用过 git，我们的仓库是静默初始化的。
+  // 没有身份时 commit-tree 直接失败，于是每次自动存档都失败，
+  // 作者看不到任何提示，30 分钟后时间线还是一片空白。
+  //
+  // 用环境变量而不是 `-c user.name=...`：
+  //   - `-c` 会插在子命令前面，args[0] 变成 "-c"，所有按 args[0]
+  //     分派子命令的调用方和测试都会错位；
+  //   - 环境变量只影响这一次子进程，同样不污染作者的仓库配置。
+  const identity = {
+    GIT_AUTHOR_NAME: "NovelPad",
+    GIT_AUTHOR_EMAIL: "novelpad@localhost",
+    GIT_COMMITTER_NAME: "NovelPad",
+    GIT_COMMITTER_EMAIL: "novelpad@localhost",
+  };
   const args = ["commit-tree", treeId, "-m", input.message];
   if (parent) args.push("-p", parent);
-  const commit = await exec(args, { cwd: root, timeoutMs: 30_000 });
+  const commit = await exec(args, { cwd: root, timeoutMs: 30_000, env: identity });
   if (commit.code !== 0) return { ok: false, error: commit.stderr.trim() || "git commit-tree 失败" };
   const commitId = commit.stdout.trim();
 

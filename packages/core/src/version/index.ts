@@ -6,6 +6,7 @@
  *   diff.ts      段落级 + 字级 diff
  *   annotate.ts  批注锚定与四级退让
  *   annotations-store.ts  批注落盘（.novelpad/annotations.jsonl）
+ *   merge.ts     章节级合并（分工合写，不做文本自动合并）
  */
 export * from "./repo.js";
 export * from "./layout.js";
@@ -13,3 +14,4 @@ export * from "./snapshot.js";
 export * from "./diff.js";
 export * from "./annotate.js";
 export * from "./annotations-store.js";
+export * from "./merge.js";
