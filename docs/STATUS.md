@@ -4,8 +4,8 @@
 > [PLAN.md](./PLAN.md)、[PLAN-UI.md](./PLAN-UI.md)、[PLAN-VERSIONING.md](./PLAN-VERSIONING.md)、
 > [DESIGN.md](./DESIGN.md)。
 >
-> 快照时间：**2026-11-28 12:00（+08:00）**
-> 代码基线：`main@5d6c5e5`
+> 快照时间：**2026-11-28 14:30（+08:00）**
+> 代码基线：`main@0966aa4`
 > 本期范围：**Windows MVP**（linux / macos 暂停）
 
 ---
@@ -133,12 +133,31 @@ shell/scripts/check-*.mjs / verify-*.mjs            静态守卫
 | L3 皮肤 | `packages/extension/media/workbench.css` | 否 |
 | L4 排版 | `configurationDefaults` + 装饰 API | 否 |
 | L5 视图 | 书房 / 时间线 / 图谱等 webview | 否 |
+| **L0 默认值** | `shell/patches/003-shell-defaults.patch` + 扩展运行时 | 是（一次） |
 
 - 标准 VS Code 里 `<link>` 404 静默失败 → 同一份扩展，两种外观。
 - 正文霞鹜文楷随包：**97 片 woff2，约 4.4MB**，构建时校验分片与 CSS 双向一致。
 - 系统 UI 优先鸿蒙黑体，缺失回退 `system-ui`（不随包分发）。
 - 书房只在没有可见编辑器时打开，启动判断延迟 700ms。
 - 段首缩进默认关闭（CSS 缩进会让光标定位左偏 2em）。
+- 正文栏宽走上游「居中版式」+ `centeredLayoutFixedWidth`（900px ≈ 46 字），
+  不用 CSS 限宽——Monaco 按容器实测尺寸排版，CSS 盖内部宽度会和每次
+  layout 打架，光标点选错位。
+- 中文界面：语言包随包内置（`vscode-language-pack-zh-hans` 1.85.0，
+  370KB），菜单是「文件 / 编辑 / 查看」而不是 File / Edit / View。
+
+**L0 为什么单列**：这四件事都无法由扩展在运行时解决，只能改壳的默认值或
+在启动早期补文件。它们的问题形态都一样——**没有任何报错，只是看起来
+「没做」**，所以每条都配了机器守卫：
+
+| 问题 | 根因 | 修法 |
+|---|---|---|
+| 主题从未激活 | `contributes.themes` 只登记不设默认值，皮肤里 `var(--vscode-*)` 全取默认深色 | 扩展在壳内首次启动写 `window.autoDetectColorScheme` + 两个 preferred 主题 |
+| 图标全变空方块 | UI 字体规则选中 `.monaco-workbench .part`（图标住在大容器里） | 只给真正承载文字的元素设字体，`.codicon` 显式保住图标字体 |
+| 正文铺满 1900px | `wordWrap:on` 按窗口宽度换行 | 居中版式 + 固定 900px |
+| **受限模式扩展不激活** | manifest 缺 `capabilities.untrustedWorkspaces`，上游默认 `supported=false` | 声明 `supported: true` |
+| 首启动信任弹窗 | `security.workspace.trust.enabled` 默认 true | 补丁改默认值 false |
+| 首启动英文界面 | `argv.json` 与 `languagepacks.json` 都在「读取时还不存在」 | 单一 bootstrap 补两份文件 |
 
 ### 3.6 版本管理与共创（M8）
 
@@ -235,20 +254,31 @@ refs/novelpad/publish/<tag>        发布版，永久
 |---|---|
 | `prepare` | 计算 `gulp=true/false`、生成矩阵（默认仅 windows） |
 | `build-extension` | 构建并打包 `novelpad.vsix` |
-| `shell` | checkout 上游 1.85.0 → overlay/patches → 安装依赖 → `gulp vscode-win32-x64` → 嵌入扩展 → zip |
-| `patch-check` | 不编译，验证补丁可重放 + 9 项静态检查 |
+| `shell` | checkout 上游 1.85.0 → overlay/patches → 依赖 → `gulp vscode-win32-x64` → 嵌入扩展 → 取语言包 → 内置语言包 → 两个默认值守卫 → zip |
+| `patch-check` | 不编译，验证补丁可重放 + 11 项静态检查 |
 
-`patch-check` 的 9 项检查：
+`patch-check` 的 11 项检查：
 
 1. 内置扩展链路
-2. 皮肤选择器
-3. `configurationDefaults`
-4. 字体分片
-5. 字形覆盖
-6. 主题颜色完整性
-7. 构建闸门
-8. 版本管理端到端（真实 git）
-9. 补丁重放
+2. 验证壳默认值补丁（真跑 `git apply` + argv 模板求值，17 项）
+3. 皮肤选择器
+4. `configurationDefaults`（含 `capabilities.untrustedWorkspaces`）
+5. 字体分片
+6. 字形覆盖
+7. 主题颜色完整性
+8. 构建闸门
+9. 版本管理端到端（真实 git）
+10. 产物体检判据自检（16 例合成 zip）
+11. 补丁重放
+
+`shell` job 里另有 4 步与首启动默认值相关：
+
+```
+取中文语言包           从 Open VSX 取 1.85.0，sha256 校验
+内置中文语言包         解压到 extensions/，生成相对路径模板
+壳默认值自检判据       用真实产物做正反 3 例（证明守卫能分辨对错）
+检查壳默认值           三件事都编进产物 + bootstrap 时序正确
+```
 
 **构建闸门**：只有手动触发且明确勾掉 `gulpBuild` 才走占位；
 push / tag 一律真编译。`check-gate.mjs` 从 YAML 抠 bash 正文跑 7 种组合，
@@ -278,15 +308,15 @@ push / tag 一律真编译。`check-gate.mjs` 从 YAML 抠 bash 正文跑 7 种�
 
 ---
 
-## 6. 当前状态（2026-11-28 12:00）
+## 6. 当前状态（2026-11-28 14:30）
 
 ### 6.1 Git
 
 | 项 | 状态 |
 |---|---|
-| 分支 | `main`，与 `origin/main` 同步 |
-| HEAD | `5d6c5e5 fix(ci): 壳构建收敛到 Windows MVP，闸门自检兼容 Node 20` |
-| tag | 无 |
+| 分支 | `main`，已推 `origin/main` |
+| HEAD | `0966aa4 fix(test): shell-theme 单测不要用 Windows 盘符造路径` |
+| tag | `v0.1.0-demo`（在 `94bec27`，Release 已发布） |
 | 工作区 | 仅用户自己的改动（见下） |
 
 用户自己的改动，**不要提交 / 不要动**：
@@ -298,45 +328,77 @@ push / tag 一律真编译。`check-gate.mjs` 从 YAML 抠 bash 正文跑 7 种�
 
 ### 6.2 CI
 
-| 运行 | 状态 |
-|---|---|
-| Extension CI `46104729307`（`5d6c5e5`） | ✅ success |
-| Shell Build `46104729295`（`5d6c5e5`） | 🔄 进行中 |
+| 运行 | 提交 | 状态 |
+|---|---|---|
+| Extension CI `46116774501` | `0966aa4` | ✅ success |
+| Shell Build `46116774493` | `0966aa4` | 🔄 进行中 |
+| Extension CI `46115089442` | `4af0742` | ❌ failure（测试用 Windows 盘符造路径，已修） |
+| Shell Build `46115089457` | `4af0742` | ⊘ cancelled（被 concurrency 取代） |
+| Shell Build `46108630776` | `94bec27` | ✅ success（真编译，tag 触发） |
+| Release `46108630738` | `94bec27` | ✅ success |
 
-Shell Build 当前进度：
+`46108630776` 的实测结果（本机核验）：
 
 ```
-prepare              success（闸门修复后 gulp=true）
-patch-check          success（Node 20 兼容问题已修）
-build-extension      success
-windows / 安装依赖     success
-windows / gulp 编译   in progress
+NovelPad-1.85.0-windows.zip   131.4MB / 1482 条目
+  NovelPad.exe                163MB（解压根即应用根）
+  workbench.desktop.main.js   29MB
+  workbench.html              含 body class="novelpad" + 皮肤 link
+  扩展 124 文件               dist/extension.js 749KB、workbench.css 11956B、97 片 woff2
+  product.json                品牌干净、builtInExtensions: []、Open VSX 市场
+  6 项 checksums              md5 全部匹配
 ```
-
-这是构建闸门修复后**第一次 push 触发的真编译**（以前 push 出来的都是几 MB 空壳）。
 
 ### 6.3 产物
 
 | 产物 | 说明 |
 |---|---|
-| `novelpad.vsix` | 本地 4.62MB / 118 文件，已核验 |
-| `novelpad-test.vsix` | 更早的测试包，不是当前基线 |
-| Shell 压缩包 | 等 `46104729295` 完成后产出 `NovelPad-1.85.0-windows.zip` |
+| `NovelPad-1.85.0-windows.zip` | 131.4MB，已发布在 Release `v0.1.0-demo` |
+| `novelpad.vsix` | 4.6MB，已发布在 Release |
+| Shell 压缩包（`0966aa4`） | 等 `46116774493` 完成；应新增语言包与首启动模板 |
+
+### 6.4 首启动实测（本地真机，2026-11-28）
+
+用 CDP 接运行中的窗口读真实计算值，模拟**全新安装**（删 `argv.json` +
+空 `userData`），一次启动：
+
+```
+argv.json 生成且中文          ✓
+languagepacks.json 生成       ✓
+clp 缓存生成（真读了翻译）    ✓
+扩展已激活                    ✓
+界面中文 8/8 菜单             ✓  文件(F) 编辑(E) 选择(S) 查看(V) ...
+无信任对话框 / 无受限横幅     ✓
+主题生效 #201f1c（夜墨）      ✓
+栏宽生效（2 个 margin，600px）✓
+```
+
+切换系统深浅色后界面实时跟随：`#201f1c` → `#f7f3e8`（宣纸），无需重启。
 
 ---
 
 ## 7. 验证基线
 
-最近一次完整验证：
+最近一次完整验证（2026-11-28 14:30）：
 
 | 项 | 结果 |
 |---|---|
 | core 单测 | **422 passed / 9 skipped** |
-| extension 单测 | **179 passed** |
+| extension 单测 | **206 passed**（9 个文件） |
 | `e2e-version.mjs` | **61 项全过**（真实 git，含 clone → 取回 → 重建时间线） |
 | `probe-trunk.mjs` | **31/31**（主干 / 托管链路探针） |
-| `tsc --noEmit` | core / extension 均干净 |
-| Windows 完整壳构建 | run `45975512418`，约 29 分钟，127.2MB |
+| `tsc --noEmit` | core / extension / cli 均干净 |
+| Windows 完整壳构建 | run `46108630776`，约 37 分钟 |
+| 首启动真机（CDP） | **9/9**（见 §6.4） |
+| `check-themes.mjs` | 13 项全过 |
+| `verify-artifact-selftest.mjs` | **16/16** |
+| `verify-patch-003.mjs` | **17/17**（含真跑 `git apply` + argv 模板求值） |
+| `verify-shell-defaults-selftest.mjs` | **3/3**（未打补丁红 / 打上绿 / 改回红） |
+| `check-gate.mjs` | 10/10 |
+
+新增的守卫都是「先证明它能分辨对错」才接进 CI：产物体检用合成 zip 做正反
+16 例，壳默认值用真实产物做正反 3 例，补丁用临时目录真跑 `git apply` 并
+**抽出 argv 模板数组求值**。只会报错的守卫比没有守卫更糟。
 
 真实模型测试默认跳过，需要显式打开：
 
@@ -353,15 +415,26 @@ NOVLEPAD_DECISION_TEST=1
 | 项 | 影响 | 计划 |
 |---|---|---|
 | 只做 Windows | linux / macos 用户暂时没有壳 | 本期不做；矩阵分支保留，手动传 `platform=linux` 或 `platform=darwin` 仍可编 |
-| Release 未跑通 | tag → Release 链路未验证 | 构建成功后打 `v0.1.0-demo` 验证 |
 | 无 PDF 导出 | 只有 TXT / DOCX | M9 再评估（Edge headless + Paged.js） |
 | 真实模型测试默认跳过 | CI 不覆盖线上 API 行为 | 本地显式开环境变量跑 |
-| 上游补丁漂移 | 每月 VS Code 更新可能冲突 | `upstream-track` 自动试重放，冲突开 Issue |
+| 上游补丁漂移 | 每月 VS Code 更新可能冲突 | `upstream-track` 自动试重放，冲突开 Issue；现有 3 个补丁都有独立验证脚本 |
 | 主题 JSON 是生成产物 | 手改会被构建覆盖 | 只改 `packages/theme/scripts/build.mjs` |
 | 构建慢 | 单平台 30~60 分钟 | 日常只改扩展；壳按需构建 |
 | README 里程碑清单过期 | 与实际状态不一致 | README 是用户正在改的文件，暂不动 |
 | 无 OAuth / 无 CRDT | 设计取舍，不是缺陷 | 借 `gh` 登录态；共创只做批注 + 分工 |
 | `novelpad-test.vsix` 过期 | 容易误用 | 以 `novelpad.vsix` 或 CI artifact 为准 |
+| 语言包固定 1.85.0 | 上游升版本时翻译键可能对不上 | `fetch-language-pack.mjs` 里版本与 sha256 一起改；不匹配会当场红 |
+| 首启动 bootstrap 只补不覆盖 | 作者手工改过 argv.json 后不再动它 | 有意为之：不覆盖用户选择 |
+| 中文语言包只内置简体 | 繁体 / 日文用户看到英文 | 需要时按同一脚本加第二个 locale |
+
+**已修的四个「静默失效」**（都表现为「看起来没做」，无报错）：
+
+| 问题 | 修法 | 守卫 |
+|---|---|---|
+| 主题从未激活 | 壳内首次启动写 autoDetect + preferred 主题 | 首启动真机 9/9 |
+| 图标变空方块 | 字体规则不再选中 `.part` 容器 | CDP 读 computed font-family |
+| 正文铺满整屏 | 居中版式 + 固定 900px | CDP 数 `.centered-layout-margin` |
+| 受限模式扩展不激活 | `capabilities.untrustedWorkspaces` | `verify-defaults.mjs` |
 
 ---
 
@@ -369,15 +442,22 @@ NOVLEPAD_DECISION_TEST=1
 
 按优先级：
 
-1. **等 `46104729295` 完成**
-   - 失败：抓 windows job 日志修复（linux 不修）
-   - 成功：下载 `NovelPad-windows`，核验 `product.json` 完整、`out/` 有真实编译产物
-2. **打 tag `v0.1.0-demo`**
-   - 端到端验证 `release.yml`
-   - 核对 Release 页只有 Windows 压缩包 + `novelpad.vsix`
+1. **等 `46116774493` 完成**（`0966aa4`）
+   - 重点看三个新守卫：`验证壳默认值补丁` / `壳默认值自检判据` / `检查壳默认值`
+   - 以及产物体检里新增的语言包与模板两项
+2. **下载产物做本机真机验证**
+   - 本地那 9/9 是「补丁语义模拟」，CI 产物才是真编译结果，两者必须都过
+   - 解压 → `NovelPad.exe --user-data-dir=<临时>` → CDP 读 lang / 菜单 /
+     主题色 / margins / 信任弹窗
 3. **回到功能主线**
    - 继续 M7 / M8 的界面与体验打磨
    - 用户优先级：先做软件，再解决工程问题
+
+已完成的（本轮）：
+- ✅ 主题激活、图标字体、正文栏宽
+- ✅ 受限模式能力声明
+- ✅ 信任机制默认关闭
+- ✅ 首启动中文（语言包内置 + 双 bootstrap）
 
 ---
 
@@ -407,17 +487,52 @@ node shell/scripts/check-themes.mjs packages/extension
 node shell/scripts/check-gate.mjs
 node shell/scripts/e2e-version.mjs
 
+# 壳默认值相关（不需上游源码，秒级）
+node shell/scripts/verify-patch-003.mjs          # 补丁可落地 + argv 模板求值
+node shell/scripts/fetch-language-pack.mjs .lp   # 取语言包并校验 sha256
+
+# 拿到构建产物后（<app> = resources/app）
+node shell/scripts/embed-language-pack.mjs <app> .lp/*.vsix --locale zh-cn
+node shell/scripts/verify-shell-defaults-selftest.mjs <app>   # 判据自检 3 例
+node shell/scripts/verify-shell-defaults.mjs <app>            # 守卫 6 项
+node shell/scripts/verify-artifact.mjs NovelPad-*.zip --expect-flat
+node shell/scripts/verify-artifact-selftest.mjs               # 判据自检 16 例
+
 # e2e（真实 VS Code 宿主）
 node packages/extension/scripts/e2e.mjs
 NOVLEPAD_LLM_TEST=1 node packages/extension/scripts/e2e.mjs
 ```
 
+改上游补丁的正确流程（**不要手写 hunk 头**）：
+
+```bash
+node shell/scripts/make-patch-003.mjs    # 从真实上游生成 003
+node shell/scripts/verify-patch-003.mjs  # 真跑 git apply + 语义检查
+```
+
+hunk 头是手算的，数错一个数字就报 `corrupt patch`；更隐蔽的是「数对了但
+上下文少一行」——那会变成一个能 apply 却把代码改错位置的补丁。所以 003
+由脚本生成，源头只有 `make-patch-003.mjs`。
+
 本机注意：
 
 - PowerShell 会破坏中文与引号：改文件用编辑工具，一次性脚本写成 `.mjs` 再执行。
+- 提交信息走文件：`git commit -F msg.txt`。内联 `-m` 里带 `"C:\"` 这类内容
+  会被 PowerShell 解析坏（实测报 `fatal: Invalid path '/fake'`）。
 - vitest 在本机建议 `--pool=forks --poolOptions.forks.singleFork=true`。
 - core 全量测试约 225 秒。
 - 改 core 导出后先 `pnpm --filter @novelpad/core run build`，再跑 extension typecheck。
+- 单测里**不要**用 `path.join("C:", ...)` 造路径：Windows 上是盘符，Linux 上
+  只是普通目录名，`path.join` 会把它当相对路径拼，同一个测试两个平台结果不同
+  （CI 就这样红过一次）。用 `os.tmpdir()`。
+- 真机验证靠 CDP，不靠截图：这台机器上终端窗口会盖住 NovelPad，截屏拿到的是
+  终端。用 `Page.captureScreenshot`，它截的是渲染器自己的画面。
+- 连 CDP 用 `http.request` + `127.0.0.1`，不要用 `fetch`：undici 在慢启动场景下
+  会报 `fetch failed` / `ECONNREFUSED`，而同端口的 `http` 请求是通的。
+- 杀进程后要等它真的消失再启动：Electron 单实例锁未释放时新进程会直接退出，
+  表现为端口永远不开。
+- **改运行时的 `workbench.desktop.main.js` 会让完整性校验红掉**，弹「安装似乎
+  损坏」。真实构建里补丁在 gulp 之前应用、checksums 在编译之后计算，不会出现。
 
 ---
 
@@ -440,6 +555,13 @@ NOVLEPAD_LLM_TEST=1 node packages/extension/scripts/e2e.mjs
 | 快照 / 主干 / 索引 | `packages/core/src/version/snapshot.ts` |
 | 推送 / 拉取 / 远端 | `packages/core/src/version/remote.ts` |
 | 壳 overlay | `shell/overlay/` |
-| 补丁 | `shell/patches/` |
+| 补丁 | `shell/patches/`（003 由 `make-patch-003.mjs` 生成，别手改） |
+| 壳默认值（信任 / 语言 / bootstrap） | `shell/patches/003-shell-defaults.patch` |
+| 壳默认值的守卫 | `shell/scripts/verify-shell-defaults.mjs` |
+| 补丁生成器 | `shell/scripts/make-patch-003.mjs` |
+| 语言包下载 / 内置 | `shell/scripts/fetch-language-pack.mjs`、`embed-language-pack.mjs` |
+| 皮肤 L3 | `packages/extension/media/workbench.css` |
+| 主题激活 / 栏宽 | `packages/extension/src/features/shell-theme.ts`、`measure.ts` |
+| 扩展能力声明 | `packages/extension/package.json` 的 `capabilities` |
 | 构建流程 | `.github/workflows/shell-build.yml` |
 | 发布流程 | `.github/workflows/release.yml` |
