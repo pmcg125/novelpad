@@ -19,6 +19,7 @@ import { openGraph, refreshGraph } from "./views/graph";
 import { openTimeline, openTimelineAIOnly, refreshTimeline } from "./views/timeline";
 import { closeStudioIfIdle, maybeOpenStudio, openStudio, refreshStudio } from "./views/studio";
 import { BranchManager, listMergeableBranches } from "./features/branches";
+import { applyShellTheme } from "./features/shell-theme";
 import {
   AutoPusher,
   HostStatusBar,
@@ -33,6 +34,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
   const chapters = new ChaptersProvider(store);
   const entities = new EntitiesProvider(store);
+
+  // 壳外观：把自带主题设成默认值。
+  //
+  // 这件事必须在第一屏之前做，否则用户先看到一眼默认深色再「跳」成
+  // 宣纸，观感很差。主题写在扩展的 configurationDefaults 里做不到
+  // （那会连标准 VS Code 一起改），只能在这里做一次。
+  void applyShellTheme(context);
   const linter = new Linter(store);
 
   context.subscriptions.push(

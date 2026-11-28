@@ -43,15 +43,39 @@
   --novelpad-hairline: 1px solid var(--vscode-sideBar-border, rgba(128, 128, 128, 0.16));
 }
 
-/* UI 字体：只落在「文字」上，不动图标字体（codicon 必须保留） */
+/* UI 字体：只落在「文字」上，不动图标字体。
+ *
+ * 为什么不能写 `.monaco-workbench .part`：`.part` 是活动栏 / 侧栏 / 面板
+ * 这些**大容器的公共类**，而图标就住在里头。把字体设在容器上，所有
+ * `codicon` 图标都会继承成 UI 字体，字符码位（\eaxx）被当普通字符渲染，
+ * 结果是一排空方块——而 `document.fonts.check('16px codicon')` 仍返回
+ * true，看起来「字体正常」，极难定位。
+ *
+ * 所以只挑真正承载文字的元素；任何 `.codicon` 都显式保住图标字体。 */
 :is(.novelpad) .monaco-workbench,
-:is(.novelpad) .monaco-workbench .part,
 :is(.novelpad) .monaco-workbench .monaco-list,
 :is(.novelpad) .monaco-workbench .monaco-inputbox,
 :is(.novelpad) .monaco-workbench .monaco-button,
-:is(.novelpad) .monaco-workbench .monaco-menu {
+:is(.novelpad) .monaco-workbench .monaco-menu,
+:is(.novelpad) .monaco-workbench .sidebar .pane-header .title,
+:is(.novelpad) .monaco-workbench .statusbar,
+:is(.novelpad) .monaco-workbench .titlebar {
   font-family: var(--novelpad-font-ui);
   letter-spacing: var(--novelpad-letter);
+}
+
+/* 图标永远用图标字体。这条必须放在上面之后，且特异性足够高：
+ * 上游 `.monaco-workbench .codicon[class*="codicon-"]` 是 3 个类 + 属性，
+ * 这里补上 `.monaco-workbench` 与属性选择器对齐。 */
+:is(.novelpad) .monaco-workbench .codicon,
+:is(.novelpad) .monaco-workbench .codicon[class*="codicon-"],
+:is(.novelpad) .monaco-workbench .action-label.codicon {
+  font-family: codicon !important;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 /* 减少动态效果：尊重系统设置（上游已有部分，这里补齐我们自己的动效） */
