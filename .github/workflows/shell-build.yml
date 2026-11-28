@@ -234,16 +234,32 @@ jobs:
           tag="${{ needs.prepare.outputs.tag }}"
           out="${{ matrix.out }}"
           base="NovelPad-$tag-${{ matrix.name }}"
+
+          # 解压根直接就是应用根。上游 gulp 产出的目录叫 VSCode-win32-x64，
+          # 不管它就打会得到「zip → VSCode-win32-x64/ → NovelPad.exe」：
+          #   1) 把微软的名字发给用户，撞商标红线；
+          #   2) 用户解压后还得再点一层才看见 exe。
+          # 改名 + 从目录内打包，让解压根就是 exe 所在层。
+          stage="NovelPad"
+          rm -rf "$stage"
+          mv "$out" "$stage"
+
           if [ "${{ matrix.archive }}" = "zip" ]; then
             if command -v 7z >/dev/null 2>&1; then
-              7z a -tzip -mx=1 "$base.zip" "$out" >/dev/null
+              ( cd "$stage" && 7z a -tzip -mx=1 "../$base.zip" . >/dev/null )
             else
-              zip -qr "$base.zip" "$out"
+              ( cd "$stage" && zip -qr "../$base.zip" . )
             fi
           else
-            tar -czf "$base.tar.gz" "$out"
+            ( cd "$stage" && tar -czf "../$base.tar.gz" . )
           fi
-          ls -lh NovelPad-*
+          ls -lh "$base".*
+
+      # 产物自检：体积能骗人，文件清单和 checksums 不能。
+      # checksums 对不上 = 用户双击就是「安装损坏」，而 CI 面板依然全绿。
+      - name: 产物体检
+        if: matrix.archive == 'zip'
+        run: node shell/scripts/verify-artifact.mjs "NovelPad-${{ needs.prepare.outputs.tag }}-${{ matrix.name }}.zip" --expect-flat
 
       - uses: actions/upload-artifact@v4
         with:
@@ -303,6 +319,11 @@ jobs:
       # 这段直接从 workflow 抠 bash 正文跑，改 workflow 不用改这里。
       - name: 检查构建闸门
         run: node shell/scripts/check-gate.mjs
+
+      # 产物体检的判据自检：守卫脚本自己也会写错（初版把 md5 写成 sha1）。
+      # 只会报错的守卫比没有守卫更糟——真问题会被淹在噪声里。
+      - name: 产物体检判据自检
+        run: node shell/scripts/verify-artifact-selftest.mjs
 
       # 版本管理端到端：真实 git，不 mock。
       # 三个静默缺陷只能这样测出来：子目录路径前缀、快照范围越界、污染作者索引。

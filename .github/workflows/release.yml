@@ -24,26 +24,42 @@ jobs:
         working-directory: packages/extension
         run: npx @vscode/vsce package --no-dependencies --allow-missing-repository -o ../../novelpad.vsix
 
-      # 壳产物由 Shell Build（tag 触发）产出；这里等同一个 commit 的构建
+      # 壳产物由 Shell Build（tag 触发）产出；这里等同一个 commit 的构建。
+      #
+      # 不能用 `--branch "$GITHUB_REF_NAME"`：tag 触发的运行里它是 tag 名
+      # （如 v0.1.0-demo），`gh run list --branch` 按分支名过滤，永远查不到，
+      # 结果是干等 120 分钟然后报「等待超时」。按 commit 找才和 ref 类型无关。
       - name: 等待壳构建完成
         id: shell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           run=""
-          for i in $(seq 1 120); do
-            info=$(gh run list --workflow "Shell Build" --branch "$GITHUB_REF_NAME" --limit 1 --json databaseId,status,conclusion)
-            status=$(echo "$info" | jq -r '.[0].status // ""')
-            if [ "$status" = "completed" ]; then
-              run=$(echo "$info" | jq -r '.[0].databaseId')
-              conclusion=$(echo "$info" | jq -r '.[0].conclusion // ""')
-              if [ "$conclusion" != "success" ]; then
-                echo "壳构建失败（$conclusion），run $run"
-                exit 1
+          for i in $(seq 1 130); do
+            info=$(gh run list --workflow "Shell Build" --commit "$SHA" --limit 10 \
+              --json databaseId,status,conclusion,headBranch,event)
+            # 同一个 commit 上可能有两个壳构建：main 的 push 与本次 tag。
+            # 按 headBranch 精确挑本 ref 的那个，否则可能拿到被
+            # concurrency 取消的另一次，误判成构建失败。
+            row=$(echo "$info" | jq -r --arg ref "$REF_NAME" \
+              '[.[] | select(.headBranch == $ref)] | .[0] // empty')
+            if [ -n "$row" ] && [ "$row" != "null" ]; then
+              status=$(echo "$row" | jq -r '.status // ""')
+              if [ "$status" = "completed" ]; then
+                run=$(echo "$row" | jq -r '.databaseId')
+                conclusion=$(echo "$row" | jq -r '.conclusion // ""')
+                if [ "$conclusion" != "success" ]; then
+                  echo "壳构建失败（$conclusion），run $run"
+                  exit 1
+                fi
+                break
               fi
-              break
+              echo "第 $i 次：$status"
+            else
+              echo "第 $i 次：壳构建尚未排队（等 $REF_NAME @ ${SHA:0:7}）"
             fi
-            echo "第 $i 次：$status"
             sleep 60
           done
           if [ -z "$run" ]; then
@@ -54,15 +70,27 @@ jobs:
 
       # 下载壳产物。这期只做 Windows MVP，矩阵只出 NovelPad-windows；
       # 以后把 linux / macos 加回矩阵时，把名字补进这个列表即可。
+      #
+      # 不能加 `|| true`：下载失败（artifact 过期 / 构建被取消）时会把
+      # 只剩 vsix 的残包当正式版发出去，用户下到的「完整版」里没有壳。
       - name: 下载壳产物
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           run="${{ steps.shell.outputs.run }}"
           for name in NovelPad-windows; do
-            gh run download "$run" -n "$name" -D dist/ || true
+            gh run download "$run" -n "$name" -D dist/
           done
-          ls -la dist/ || true
+          # 空目录也会让 action-gh-release 的 `dist/*` 静默匹配不到文件
+          ls -lh dist/
+          test -n "$(ls -A dist/)"
+
+      # 压缩包自检：checksums 对不上 = 用户双击就是「安装损坏」。
+      - name: 壳产物体检
+        run: |
+          for z in dist/*.zip; do
+            node shell/scripts/verify-artifact.mjs "$z" --expect-flat
+          done
 
       - name: 上游版本
         id: up
