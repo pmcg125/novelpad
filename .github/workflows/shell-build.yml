@@ -234,12 +234,12 @@ jobs:
       - name: 取中文语言包
         run: node shell/scripts/fetch-language-pack.mjs .langpack
 
+      # 显式声明 bash：windows runner 默认是 PowerShell，它不认 `\` 续行。
+      # 第一次跑这里就是栽在这上面：
+      #   ParserError: Unexpected token '\' in expression or statement
+      # 现在写成单行，不依赖任何 shell 的续行语法，两个平台都一样。
       - name: 内置中文语言包
-        run: |
-          node shell/scripts/embed-language-pack.mjs \
-            "${{ matrix.out }}/resources/app" \
-            .langpack/vscode-language-pack-zh-hans-1.85.0.vsix \
-            --locale zh-cn
+        run: node shell/scripts/embed-language-pack.mjs "${{ matrix.out }}/resources/app" .langpack/vscode-language-pack-zh-hans-1.85.0.vsix --locale zh-cn
 
       # 三件「只能靠真跑发现」的默认值：信任关闭 / 默认中文 / 首启动补
       # languagepacks.json。判据自检也跑一遍，防止守卫自己写错。
@@ -346,6 +346,15 @@ jobs:
       # 这段直接从 workflow 抠 bash 正文跑，改 workflow 不用改这里。
       - name: 检查构建闸门
         run: node shell/scripts/check-gate.mjs
+
+      # workflow 的 shell 依赖：windows runner 默认 PowerShell，不认 `\` 续行。
+      # 这类错误只有真跑到那一步才暴露，而前面的 gulp 编译要 30 分钟。
+      # 实测踩过：内置语言包那一步在编译成功之后才炸。
+      - name: 检查 workflow shell 安全性
+        run: node shell/scripts/check-workflow-shells.mjs
+
+      - name: workflow shell 判据自检
+        run: node shell/scripts/check-workflow-shells-selftest.mjs
 
       # 产物体检的判据自检：守卫脚本自己也会写错（初版把 md5 写成 sha1）。
       # 只会报错的守卫比没有守卫更糟——真问题会被淹在噪声里。
