@@ -79,8 +79,14 @@ jobs:
           # 多行值写 $GITHUB_OUTPUT 必须用 heredoc（key<<EOF ... EOF），
           # 直接用 echo 只有第一行带 key= 前缀，其余行会被判为 "Invalid format"。
           # 这里先把 JSON 压成单行，双保险。
-          ALL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"},{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"},{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]'
+          #
+          # 这期只做 Windows MVP：默认矩阵只保留 windows。linux / macos
+          # 的定义留着但收进 case 分支，想手动编它们时
+          # workflow_dispatch 传 platform=linux / darwin 就能编，
+          # 平时 push / tag 触发不再为另外两个平台各烧一小时 runner。
+          ALL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]'
           case "$PLATFORM" in
+            all|"")         SEL="$ALL" ;;
             win32|windows) SEL='[{"name":"windows","os":"windows-2022","gulp":"vscode-win32-x64","out":"VSCode-win32-x64","archive":"zip"}]' ;;
             linux)         SEL='[{"name":"linux","os":"ubuntu-latest","gulp":"vscode-linux-x64","out":"VSCode-linux-x64","archive":"tar.gz"}]' ;;
             darwin|macos)  SEL='[{"name":"macos","os":"macos-latest","gulp":"vscode-darwin-arm64","out":"VSCode-darwin-arm64","archive":"zip"}]' ;;

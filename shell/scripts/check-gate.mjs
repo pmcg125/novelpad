@@ -82,7 +82,9 @@ check(
 );
 
 // 关键：条件里不能再有裸的 inputs.gulpBuild != false
-const gates = [...text.matchAll(/^\s*if:\s*(.+)$/gm).map((m) => m[1].trim())];
+// 注意别写 matchAll(...).map(...)：迭代器 helper 要 Node 22+，
+// CI 是 Node 20，本机 Node 26 会把这个问题完全盖住。
+const gates = [...text.matchAll(/^\s*if:\s*(.+)$/gm)].map((m) => m[1].trim());
 check(
   "三条 gulp 闸门都改用 needs.prepare.outputs.gulp",
   gates.filter((g) => /gulpBuild|outputs\.gulp/.test(g)).length === 3 &&

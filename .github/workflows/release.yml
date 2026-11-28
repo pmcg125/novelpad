@@ -52,12 +52,14 @@ jobs:
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
 
+      # 下载壳产物。这期只做 Windows MVP，矩阵只出 NovelPad-windows；
+      # 以后把 linux / macos 加回矩阵时，把名字补进这个列表即可。
       - name: 下载壳产物
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           run="${{ steps.shell.outputs.run }}"
-          for name in NovelPad-windows NovelPad-linux NovelPad-macos; do
+          for name in NovelPad-windows; do
             gh run download "$run" -n "$name" -D dist/ || true
           done
           ls -la dist/ || true
@@ -68,14 +70,14 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: NovelPad ${{ github.ref_name }}（基于 VS Code ${{ steps.up.outputs.tag }}）
+          name: NovelPad ${{ github.ref_name }}（基于 VS Code ${{ steps.up.outputs.tag }}，本期仅 Windows）
           files: |
             novelpad.vsix
             dist/*
           generate_release_notes: true
           body: |
             ## 安装
-            - **完整版**（NovelPad 壳）：下载对应平台的压缩包，解压即用
+            - **完整版**（NovelPad 壳）：下载压缩包，解压即用（本期仅提供 Windows 版）
             - **扩展版**（装到标准 VS Code / VSCodium / Cursor）：下载 `novelpad.vsix`，命令面板「从 VSIX 安装」
 
             > 本产品基于 [VS Code](https://github.com/microsoft/vscode)（MIT），与 Microsoft 无关。
