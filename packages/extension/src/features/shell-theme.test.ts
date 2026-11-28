@@ -51,9 +51,20 @@ describe("识别壳的 workbench.html", () => {
 });
 
 describe("从扩展目录反推 app 根", () => {
+  // 不要写 path.join("C:", ...)：Windows 上 "C:" 是盘符，Linux 上只是普通
+  // 目录名，path.join 会把它当相对路径拼成 "<cwd>/C:/fake/..."，
+  // 于是同一个测试在两个平台得到不同结果（CI 就是这样红的）。
+  // 用 os.tmpdir() 造平台无关的绝对路径。
   it("extensions/novelpad 的上一级上一级就是 app", () => {
-    const ext = path.join("C:", "fake", "resources", "app", "extensions", "novelpad");
-    expect(appRootOf(ext)).toBe(path.join("C:", "fake", "resources", "app"));
+    const app = path.join(os.tmpdir(), "np-fake", "resources", "app");
+    const ext = path.join(app, "extensions", "novelpad");
+    expect(appRootOf(ext)).toBe(app);
+  });
+
+  it("反推结果与路径分隔符无关（只用 .. 上跳两级）", () => {
+    // 用正斜杠写一遍：Linux/macOS 原生，Windows 也接受
+    const ext = "/opt/novelpad/resources/app/extensions/novelpad";
+    expect(appRootOf(ext)).toBe(path.resolve("/opt/novelpad/resources/app"));
   });
 });
 
