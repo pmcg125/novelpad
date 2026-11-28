@@ -4,8 +4,8 @@
 > [PLAN.md](./PLAN.md)、[PLAN-UI.md](./PLAN-UI.md)、[PLAN-VERSIONING.md](./PLAN-VERSIONING.md)、
 > [DESIGN.md](./DESIGN.md)。
 >
-> 快照时间：**2026-11-28 14:30（+08:00）**
-> 代码基线：`main@0966aa4`
+> 快照时间：**2026-11-28 18:40（+08:00）**
+> 代码基线：`main@5e5140d`
 > 本期范围：**Windows MVP**（linux / macos 暂停）
 
 ---
@@ -316,14 +316,14 @@ push / tag 一律真编译。`check-gate.mjs` 从 YAML 抠 bash 正文跑 7 种�
 
 ---
 
-## 6. 当前状态（2026-11-28 14:30）
+## 6. 当前状态（2026-11-28 18:40）
 
 ### 6.1 Git
 
 | 项 | 状态 |
 |---|---|
 | 分支 | `main`，已推 `origin/main` |
-| HEAD | `0966aa4 fix(test): shell-theme 单测不要用 Windows 盘符造路径` |
+| HEAD | `5e5140d docs: 记下批量化排查方法 + 守卫的两个环境陷阱` |
 | tag | `v0.1.0-demo`（在 `94bec27`，Release 已发布） |
 | 工作区 | 仅用户自己的改动（见下） |
 
@@ -338,32 +338,38 @@ push / tag 一律真编译。`check-gate.mjs` 从 YAML 抠 bash 正文跑 7 种�
 
 | 运行 | 提交 | 状态 |
 |---|---|---|
-| Extension CI `46116774501` | `0966aa4` | ✅ success |
-| Shell Build `46116774493` | `0966aa4` | 🔄 进行中 |
-| Extension CI `46115089442` | `4af0742` | ❌ failure（测试用 Windows 盘符造路径，已修） |
-| Shell Build `46115089457` | `4af0742` | ⊘ cancelled（被 concurrency 取代） |
+| Shell Build `46143657915` | `1ff506b` | ✅ **success（全绿）** |
+| Extension CI `46143657925` | `1ff506b` | ✅ success |
+| Shell Build `46132869052` | `284c548` | ❌ failure（两个新守卫自身跑不起来，已修） |
+| Shell Build `46116774493` | `0966aa4` | ❌ failure（语言包步骤 PowerShell 语法崩，已修） |
+| Extension CI `46115089442` | `4af0742` | ❌ failure（测试用盘符造路径，已修） |
 | Shell Build `46108630776` | `94bec27` | ✅ success（真编译，tag 触发） |
 | Release `46108630738` | `94bec27` | ✅ success |
 
-`46108630776` 的实测结果（本机核验）：
+`46143657915` 的关键步骤（全部 OK）：
 
 ```
-NovelPad-1.85.0-windows.zip   131.4MB / 1482 条目
-  NovelPad.exe                163MB（解压根即应用根）
-  workbench.desktop.main.js   29MB
-  workbench.html              含 body class="novelpad" + 皮肤 link
-  扩展 124 文件               dist/extension.js 749KB、workbench.css 11956B、97 片 woff2
-  product.json                品牌干净、builtInExtensions: []、Open VSX 市场
-  6 项 checksums              md5 全部匹配
+patch-check
+  验证壳默认值补丁          17/17（真跑 git apply + argv 模板求值）
+  检查 workflow shell 安全性  4 个 workflow 全过
+  workflow shell 判据自检     8/8
+  产物体检判据自检            16/16
+windows
+  构建（gulp vscode-win32-x64）
+  取中文语言包               sha256 校验
+  内置中文语言包
+  壳默认值判据自检            8/8（合成夹具）
+  检查壳默认值                6/6
+  产物体检                   含语言包与模板两项
 ```
 
 ### 6.3 产物
 
 | 产物 | 说明 |
 |---|---|
-| `NovelPad-1.85.0-windows.zip` | 131.4MB，已发布在 Release `v0.1.0-demo` |
+| `NovelPad-1.85.0-windows.zip`（`94bec27`） | 131.4MB，已发布在 Release `v0.1.0-demo` |
 | `novelpad.vsix` | 4.6MB，已发布在 Release |
-| Shell 压缩包（`0966aa4`） | 等 `46116774493` 完成；应新增语言包与首启动模板 |
+| Shell 压缩包（`1ff506b`） | CI 已产出；应含语言包与首启动模板 |
 
 ### 6.4 首启动实测（本地真机，2026-11-28）
 
