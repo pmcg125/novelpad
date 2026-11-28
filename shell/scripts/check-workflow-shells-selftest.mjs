@@ -1,10 +1,13 @@
-#!/usr/bin/env node
 /**
  * `check-workflow-shells.mjs` 的判据自检。
  *
- * 用真实的「修好前 / 修好后」两种写法当夹具，证明守卫能分辨对错。
- * 也顺带钉住 `release.yml` 那种「只在 ubuntu 上跑」的场景**不能**误报——
- * 误报多了守卫会被无视，比没有守卫更糟。
+ * 覆盖三类：
+ *   1. 真问题必须抓到（续行 / bash 语法）
+ *   2. 正确写法不能误报（显式 shell、单行、ubuntu-only 续行）
+ *   3. 扫描器自身：多 job、多 step、run 多行正文都要能正确切分
+ *
+ * 第 3 类特别重要——手写解析器最大的风险是「静默漏掉某个 job」，那样
+ * 守卫会显示全绿但实际没检查。所以要断言它确实看到了预期的 job 数量。
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -14,36 +17,11 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, "check-workflow-shells.mjs");
-
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "np-wfshell-"));
 
-/** 写一个最小 workflow，jobs 内容由参数决定 */
-function wf(name, body) {
+function writeWf(name, lines) {
   const f = path.join(tmp, name);
-  fs.writeFileSync(
-    f,
-    [
-      "name: Test",
-      "on: push",
-      "jobs:",
-      "  a:",
-      "    runs-on: windows-latest",
-      "    steps:",
-      body,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  return f;
-}
-
-function wfLinux(name, body) {
-  const f = path.join(tmp, name);
-  fs.writeFileSync(
-    f,
-    ["name: Test", "on: push", "jobs:", "  a:", "    runs-on: ubuntu-latest", "    steps:", body, ""].join("\n"),
-    "utf8",
-  );
+  fs.writeFileSync(f, lines.join("\n") + "\n", "utf8");
   return f;
 }
 
@@ -58,72 +36,150 @@ function run(file) {
 
 const cases = [];
 
-/* ---------- 反例：正是因为这种写法，CI 红过一次 ---------- */
-const bad = wf(
-  "bad.yml",
-  [
-    "      - name: 内置中文语言包",
-    "        run: |",
-    "          node shell/scripts/embed-language-pack.mjs \\",
-    '            "VSCode-win32-x64/resources/app" \\',
-    "            .langpack/x.vsix \\",
-    "            --locale zh-cn",
-  ].join("\n"),
-);
-const r1 = run(bad);
-cases.push({
-  name: "windows job + bash 续行 + 未声明 shell → 必须报错",
-  ok: r1.code !== 0 && /ParserError|续行/.test(r1.out),
-  out: r1.out,
-});
+/* ============ 1. 反例：bash 续行 + windows + 未声明 ============ */
+const bad1 = writeWf("bad1.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: 内置中文语言包",
+  "        run: |",
+  "          node shell/scripts/embed.mjs \\",
+  '            "VSCode-win32-x64/resources/app" \\',
+  "            .langpack/x.vsix \\",
+  "            --locale zh-cn",
+]);
+const r1 = run(bad1);
+cases.push({ name: "windows + 续行 + 未声明 → 必错", ok: r1.code !== 0 && /ParserError|续行/.test(r1.out), out: r1.out });
 
-/* ---------- 正例 1：显式 shell: bash ---------- */
-const good1 = wf(
-  "good1.yml",
-  [
-    "      - name: 内置中文语言包",
-    "        shell: bash",
-    "        run: |",
-    "          node shell/scripts/embed-language-pack.mjs \\",
-    '            "VSCode-win32-x64/resources/app" \\',
-    "            .langpack/x.vsix \\",
-    "            --locale zh-cn",
-  ].join("\n"),
-);
+/* ============ 2. 正例：显式 shell: bash ============ */
+const good1 = writeWf("good1.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: 打包",
+  "        shell: bash",
+  "        run: |",
+  "          node a.mjs \\",
+  "            --x",
+]);
 const r2 = run(good1);
 cases.push({ name: "显式 shell: bash → 通过", ok: r2.code === 0, out: r2.out });
 
-/* ---------- 正例 2：单行命令（实际采用的改法） ---------- */
-const good2 = wf(
-  "good2.yml",
-  ['      - name: 内置中文语言包', '        run: node shell/scripts/embed-language-pack.mjs "${{ matrix.out }}/resources/app" x.vsix --locale zh-cn'].join("\n"),
-);
+/* ============ 3. 正例：单行 ============ */
+const good2 = writeWf("good2.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: 语言包",
+  "        run: node embed.mjs a b c",
+]);
 const r3 = run(good2);
 cases.push({ name: "单行命令 → 通过", ok: r3.code === 0, out: r3.out });
 
-/* ---------- 正例 3：只在 ubuntu 上跑的 job 用续行，不该误报 ---------- */
-const good3 = wfLinux(
-  "good3.yml",
-  [
-    "      - name: 等待壳构建完成",
-    "        run: |",
-    "          gh run list \\",
-    "            --limit 10 \\",
-    "            --json databaseId",
-  ].join("\n"),
-);
+/* ============ 4. 正例：ubuntu-only 用续行，不误报 ============ */
+const good3 = writeWf("good3.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  release:",
+  "    runs-on: ubuntu-latest",
+  "    steps:",
+  "      - name: 等待",
+  "        run: |",
+  "          gh run list \\",
+  "            --limit 10 \\",
+  "            --json databaseId",
+]);
 const r4 = run(good3);
-cases.push({ name: "ubuntu-only job 用续行 → 不误报", ok: r4.code === 0, out: r4.out });
+cases.push({ name: "ubuntu-only 续行 → 不误报", ok: r4.code === 0, out: r4.out });
 
-/* ---------- 反例 2：windows job 里 bash 专有语法 ---------- */
-const bad2 = wf(
-  "bad2.yml",
-  ["      - name: 打包", "        run: |", "          rm -rf NovelPad", '          if [ "$x" = "zip" ]; then echo zip; fi'].join("\n"),
-);
+/* ============ 5. 反例：bash 语法 + windows + 未声明 ============ */
+const bad2 = writeWf("bad2.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: 打包",
+  "        run: |",
+  "          rm -rf NovelPad",
+  '          if [ "$x" = "zip" ]; then echo zip; fi',
+]);
 const r5 = run(bad2);
-cases.push({ name: "windows job + bash 语法 + 未声明 shell → 必须报错", ok: r5.code !== 0, out: r5.out });
+cases.push({ name: "windows + bash 语法 + 未声明 → 必错", ok: r5.code !== 0, out: r5.out });
 
-/* ---------- 汇总 ---------- */
+/* ============ 6. 扫描器：多 job 都要被看到 ============ */
+// 第一个 job 干净，第二个 job（windows）有问题。
+// 如果扫描器切分错误、只看了第一个 job，就会误报「全部安全」。
+const multi = writeWf("multi.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  clean:",
+  "    runs-on: ubuntu-latest",
+  "    steps:",
+  "      - name: a",
+  "        run: echo hi",
+  "  dirty:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: b",
+  "        run: |",
+  "          node x.mjs \\",
+  "            --y",
+]);
+const r6 = run(multi);
+cases.push({ name: "多 job：第二个 job 的问题也要抓到", ok: r6.code !== 0 && /dirty/.test(r6.out), out: r6.out });
+
+/* ============ 7. 扫描器：job 内多 step，问题在最后一个 ============ */
+const manySteps = writeWf("manysteps.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - uses: actions/checkout@v4",
+  '      - name: 第一步',
+  "        run: node a.mjs",
+  "      - name: 第二步",
+  "        run: node b.mjs",
+  "      - name: 最后一步有问题",
+  "        run: |",
+  "          node c.mjs \\",
+  "            --z",
+]);
+const r7 = run(manySteps);
+cases.push({ name: "多 step：最后一个 step 的问题也要抓到", ok: r7.code !== 0 && /最后一步/.test(r7.out), out: r7.out });
+
+/* ============ 8. 扫描器：run 多行正文里的 bash 语法要能看到 ============ */
+const multiline = writeWf("multiline.yml", [
+  "name: T",
+  "on: push",
+  "jobs:",
+  "  shell:",
+  "    runs-on: windows-latest",
+  "    steps:",
+  "      - name: 打包",
+  "        run: |",
+  "          set -e",
+  "          mv output NovelPad",
+  "          rm -rf temp",
+]);
+const r8 = run(multiline);
+cases.push({ name: "多行正文里的 bash 语法要能看到", ok: r8.code !== 0, out: r8.out });
+
+/* ============ 汇总 ============ */
 console.log("");
 let badCount = 0;
 for (const c of cases) {
@@ -134,6 +190,7 @@ for (const c of cases) {
     console.log(
       c.out
         .split("\n")
+        .filter(Boolean)
         .map((l) => "  " + l)
         .join("\n"),
     );

@@ -242,9 +242,13 @@ jobs:
         run: node shell/scripts/embed-language-pack.mjs "${{ matrix.out }}/resources/app" .langpack/vscode-language-pack-zh-hans-1.85.0.vsix --locale zh-cn
 
       # 三件「只能靠真跑发现」的默认值：信任关闭 / 默认中文 / 首启动补
-      # languagepacks.json。判据自检也跑一遍，防止守卫自己写错。
-      - name: 壳默认值自检判据
-        run: node shell/scripts/verify-shell-defaults-selftest.mjs "${{ matrix.out }}/resources/app"
+      # languagepacks.json。
+      #
+      # 自检不传产物路径：它用合成夹具（几十行的假文件）做正反例，
+      # 不依赖构建产物。之前拿真实产物当夹具，在 CI 里必然红——CI 产物
+      # 本身就是打过补丁的，「未打补丁必须红」这个前提不成立。
+      - name: 壳默认值判据自检
+        run: node shell/scripts/verify-shell-defaults-selftest.mjs
 
       - name: 检查壳默认值
         run: node shell/scripts/verify-shell-defaults.mjs "${{ matrix.out }}/resources/app"

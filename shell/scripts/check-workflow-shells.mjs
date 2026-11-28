@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 检查 workflow 里每个 `run:` 步骤对 shell 的隐式依赖。
+ * 检查 workflow 里 `run:` 步骤对 shell 的隐式依赖。
  *
  *   node shell/scripts/check-workflow-shells.mjs [workflow 文件...]
  *
@@ -28,6 +28,17 @@
  * 实测踩过：`内置中文语言包` 用了 bash 的 `\` 续行，gulp 编译成功之后
  * 才在 PowerShell 里炸掉。
  *
+ * ── 为什么不用 js-yaml ──
+ *
+ * 第一版用 js-yaml 解析 workflow，结果在 patch-check 里跑不起来：
+ * 那个 job 的 `pnpm install` 排在所有检查**之后**（为了省时间，前面的
+ * 检查都是零依赖的），执行时根本没有 node_modules。
+ *
+ * 让守卫依赖一个可选包，等于给它加了一个「环境不对就红」的失败模式。
+ * 所以这里手写一个只认 workflow 结构的极简扫描器：按缩进切出
+ * job → step → run 块。它不需要完整 YAML 语义，只需要「哪个 job 跑在
+ * 哪个平台、这一步有没有声明 shell、run 正文是什么」。
+ *
  * ── 判据 ──
  *
  *   A. 反斜杠续行 + job 可能跑在 windows 上 + 没声明 shell   → 必错
@@ -35,51 +46,171 @@
  *   C. 多行块里有未引用的 Windows 盘符路径                    → 仅提示
  *
  * 注意 A/B 都要求「可能跑在 windows 上」。只在 ubuntu 上跑的 job 默认
- * 就是 bash，`\` 续行完全正常——判据写宽了会误报，而误报多了守卫就会被
+ * 就是 bash，`\` 续行完全正常——判据写宽了会误报，而误报多了守卫会被
  * 无视，比没有守卫更糟。
  */
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 
-/** js-yaml 只在 pnpm 的虚拟目录里，走 createRequire 直接指过去 */
-function loadYaml() {
-  const req = createRequire(path.join(repoRoot, "package.json"));
-  try {
-    return req("js-yaml");
-  } catch {
-    /* 根 package.json 里没有这个依赖，退到 pnpm store */
+/* ============================================================
+ * 极简 workflow 扫描器
+ *
+ * 只回答三件事：
+ *   · 这个文件里有哪些 job，各自的 runs-on 是什么
+ *   · 每个 job 的 steps 里，哪些是 run 步骤
+ *   · 某个 run 步骤有没有显式 shell
+ *
+ * 做法：按行处理，用缩进判断层级。
+ *   jobs:                      (0)
+ *     <jobId>:                 (2)
+ *       runs-on: ubuntu-...    (4)
+ *       steps:                 (4)
+ *         - name: xxx          (6)
+ *           shell: bash        (8)
+ *           run: |             (8)
+ *             <正文>            (10+)
+ * ============================================================ */
+
+/** 数缩进（空格数；tab 按 2 个空格算，workflow 里一般不用 tab） */
+function indentOf(line) {
+  let n = 0;
+  for (const ch of line) {
+    if (ch === " ") n += 1;
+    else if (ch === "\t") n += 2;
+    else break;
   }
-  const globs = fs.existsSync(path.join(repoRoot, "node_modules", ".pnpm"))
-    ? fs.readdirSync(path.join(repoRoot, "node_modules", ".pnpm")).filter((d) => d.startsWith("js-yaml@"))
-    : [];
-  for (const g of globs) {
-    try {
-      return createRequire(path.join(repoRoot, "node_modules", ".pnpm", g, "node_modules", ""))("js-yaml");
-    } catch {
-      /* 换下一个 */
+  return n;
+}
+
+const isBlank = (line) => /^\s*(#.*)?$/.test(line);
+
+/** 从 `jobs:` 之后切出 job 块 */
+function parseWorkflow(text) {
+  const lines = text.split(/\r?\n/);
+  const jobs = [];
+  let inJobs = false;
+  let jobsIndent = -1;
+  let cur = null;
+  let curJobIndent = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isBlank(line)) continue;
+    const ind = indentOf(line);
+    const trimmed = line.trim();
+
+    if (!inJobs) {
+      if (/^jobs:\s*$/.test(trimmed) && ind === 0) {
+        inJobs = true;
+        jobsIndent = 0;
+      }
+      continue;
+    }
+
+    // 回到 job 级
+    if (ind <= jobsIndent && trimmed && !trimmed.startsWith("#")) {
+      inJobs = false;
+      continue;
+    }
+
+    // 新的 job：`<id>:` 且缩进比 jobs 深一层
+    if (cur === null || (ind === curJobIndent && /^[\w-]+:\s*$/.test(trimmed))) {
+      if (/^[\w-]+:\s*$/.test(trimmed)) {
+        cur = { id: trimmed.replace(/:$/, "").trim(), runsOn: "", defaultShell: "", steps: [] };
+        jobs.push(cur);
+        curJobIndent = ind;
+        continue;
+      }
+    }
+    if (!cur) continue;
+
+    // job 级字段
+    if (ind === curJobIndent + 2 || ind === curJobIndent + 4) {
+      const mRun = /^runs-on:\s*(.+)$/.exec(trimmed);
+      if (mRun) cur.runsOn = mRun[1].trim();
+      const mShell = /^shell:\s*(.+)$/.exec(trimmed);
+      if (mShell && !cur.inSteps) cur.defaultShell = mShell[1].trim();
+    }
+
+    // steps
+    if (/^steps:\s*$/.test(trimmed)) {
+      cur.inSteps = true;
+      cur.stepsIndent = ind;
+      continue;
+    }
+    if (!cur.inSteps) continue;
+
+    // 新 step 开始
+    if (trimmed.startsWith("- ") && ind >= (cur.stepsIndent ?? 0) + 2 - 2) {
+      // 只认与上一个 step 同级的（或第一个）
+      const stepIndent = ind;
+      if (cur.curStep && stepIndent < cur.curStep.indent) {
+        cur.curStep = null;
+      }
+      if (!cur.curStep || stepIndent <= cur.curStep.indent) {
+        cur.curStep = { indent: stepIndent, name: "", shell: null, run: null, runIndent: -1 };
+        cur.steps.push(cur.curStep);
+        const rest = trimmed.slice(2).trim();
+        const mName = /^name:\s*(.*)$/.exec(rest);
+        if (mName) cur.curStep.name = mName[1].trim().replace(/^["']|["']$/g, "");
+        const mRun = /^run:\s*(.*)$/.exec(rest);
+        if (mRun) {
+          cur.curStep.run = mRun[1] === "|" || mRun[1] === ">" ? "" : mRun[1];
+          cur.curStep.runIndent = stepIndent + 2;
+        }
+        continue;
+      }
+    }
+
+    if (!cur.curStep) continue;
+
+    // step 字段
+    const mName = /^name:\s*(.*)$/.exec(trimmed);
+    if (mName && ind <= cur.curStep.indent + 4) {
+      cur.curStep.name = mName[1].trim().replace(/^["']|["']$/g, "");
+      continue;
+    }
+    const mShell = /^shell:\s*(.+)$/.exec(trimmed);
+    if (mShell && ind <= cur.curStep.indent + 4) {
+      cur.curStep.shell = mShell[1].trim();
+      continue;
+    }
+    const mRun = /^run:\s*(.*)$/.exec(trimmed);
+    if (mRun && ind <= cur.curStep.indent + 4) {
+      cur.curStep.run = mRun[1] === "|" || mRun[1] === ">" ? "" : mRun[1];
+      cur.curStep.runIndent = ind + 2;
+      continue;
+    }
+    // run 的多行正文
+    if (cur.curStep.run !== null && ind >= cur.curStep.runIndent) {
+      cur.curStep.run += (cur.curStep.run ? "\n" : "") + line.slice(Math.min(ind, cur.curStep.runIndent));
+      continue;
     }
   }
-  return null;
+
+  return jobs;
 }
 
-const yaml = loadYaml();
-if (!yaml) {
-  console.error("找不到 js-yaml。先 pnpm install。");
-  process.exit(2);
-}
+/* ============================================================
+ * 判据
+ * ============================================================ */
 
 const args = process.argv.slice(2);
+const wfDir = path.join(repoRoot, ".github", "workflows");
 const files = args.length
   ? args
-  : fs
-      .readdirSync(path.join(repoRoot, ".github", "workflows"))
-      .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
-      .map((f) => path.join(repoRoot, ".github", "workflows", f));
+  : fs.existsSync(wfDir)
+    ? fs.readdirSync(wfDir).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(wfDir, f))
+    : [];
+
+if (!files.length) {
+  console.error("找不到 workflow 文件");
+  process.exit(2);
+}
 
 let problems = 0;
 let notes = 0;
@@ -89,32 +220,27 @@ for (const file of files) {
     console.log(`(跳过，不存在) ${path.basename(file)}`);
     continue;
   }
-  let doc;
-  try {
-    doc = yaml.load(fs.readFileSync(file, "utf8"));
-  } catch (e) {
-    console.error(`${path.basename(file)}: YAML 解析失败 ${e.message}`);
+  const jobs = parseWorkflow(fs.readFileSync(file, "utf8"));
+  console.log(`\n=== ${path.basename(file)}（${jobs.length} 个 job）===`);
+
+  if (!jobs.length) {
+    console.log("  ⚠ 没解析出任何 job，扫描器可能不认这个文件的写法");
     problems++;
     continue;
   }
-  console.log(`\n=== ${path.basename(file)} ===`);
 
-  for (const [jobName, job] of Object.entries(doc.jobs ?? {})) {
-    const jobShell = job.defaults?.run?.shell;
-    const runsOn = String(job["runs-on"] ?? "");
-    // 「可能跑在 windows 上」：写死 windows-* / 用矩阵且矩阵含 windows，
-    // 或者用的是 self-hosted 这种不确定的
-    const maybeWindows = /windows/i.test(runsOn) || /matrix|self-hosted/i.test(runsOn);
+  for (const job of jobs) {
+    const maybeWindows = /windows/i.test(job.runsOn) || /matrix|self-hosted/i.test(job.runsOn);
 
-    for (const step of job.steps ?? []) {
-      if (typeof step.run !== "string") continue;
+    for (const step of job.steps) {
+      if (step.run === null) continue;
       const body = step.run;
-      const label = `${jobName} / ${step.name ?? "(未命名)"}`;
-      const declared = step.shell ?? jobShell;
+      const label = `${job.id} / ${step.name || "(未命名)"}`;
+      const declared = step.shell ?? job.defaultShell ?? null;
       const effective = declared ?? (maybeWindows ? "pwsh(默认)" : "bash(默认)");
 
       // A. 反斜杠续行
-      if (/\\\r?\n/.test(body) && !declared && maybeWindows) {
+      if (/\\[ \t]*\r?\n/.test(body) && !declared && maybeWindows) {
         console.log(`  ✗ ${label}`);
         console.log(`      含 \\ 续行但未声明 shell（实际会用 ${effective}）`);
         console.log(`      → windows 上会报 ParserError: Unexpected token '\\'`);
@@ -123,11 +249,12 @@ for (const file of files) {
       }
 
       // B. bash 专有语法
+      const flat = body.replace(/\n/g, " ");
       const bashish =
-        /\[\s+"?\$/.test(body) ||
-        /\$\{?[A-Za-z_]+\[@\]/.test(body) ||
-        /command -v/.test(body) ||
-        /^\s*(rm -rf|mv |cp |mkdir -p|ls -lh?)/m.test(body);
+        /\[\s+"?\$/.test(flat) ||
+        /\$\{?[A-Za-z_]+\[@\]/.test(flat) ||
+        /command -v/.test(flat) ||
+        /(^|\s)(rm -rf|mv |cp |mkdir -p|ls -lh?)\s/.test(flat);
       if (bashish && !declared && maybeWindows) {
         console.log(`  ✗ ${label}`);
         console.log(`      bash 风格命令但未声明 shell（实际会用 ${effective}）`);

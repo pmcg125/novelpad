@@ -85,7 +85,18 @@ if (trustConst) {
 check("工作区信任默认关闭", trustOff, trustDetail);
 
 /* ---------- 2. argv.json 默认 locale ---------- */
-const hasLocale = main.includes('"locale": "zh-cn"') || main.includes("'locale': 'zh-cn'") || /locale["']?\s*:\s*["']zh-cn["']/.test(main);
+// 这一行在不同层面有三种形态，判据必须全都认：
+//   源码            '\t"locale": "zh-cn",'      （单引号字符串、字面 \t）
+//   编译产物        "\t\"locale\": \"zh-cn\","  （双引号、真 tab、内层引号被转义）
+//   argv.json 成品  "locale": "zh-cn"           （JSON 里就是普通键值）
+//
+// 第一版只认第三种，结果在真实产物上永远红——而它之前没被跑到，
+// 所以这个漏洞一直没暴露，是判据自检（合成夹具用第二种形态）抓出来的。
+const hasLocale =
+  /"locale"\s*:\s*"zh-cn"/.test(main) || // 成品 JSON 形态
+  /\\"locale\\"\s*:\s*\\"zh-cn\\"/.test(main) || // 编译产物：内层引号被转义
+  /'\\t"locale": "zh-cn"/.test(main) || // 源码：单引号字符串
+  /["']locale['"]\s*:\s*["']zh-cn["']/.test(main); // 兜底
 check("argv.json 默认 locale = zh-cn", hasLocale, "out/main.js 的默认模板里没有 locale");
 
 /* ---------- 3. 首启动补齐 argv.json 与 languagepacks.json ---------- */
@@ -119,14 +130,28 @@ if (fs.existsSync(tpl)) {
     const locales = Object.keys(j);
     const first = j[locales[0]];
     const paths = Object.values(first?.translations ?? {});
-    const missing = paths.filter((p) => !fs.existsSync(path.join(appDir, p)));
-    tplOk = locales.length > 0 && paths.length > 0 && missing.length === 0;
-    tplDetail = `${locales.join(",")} / ${paths.length} 个翻译，缺 ${missing.length} 个`;
+
+    // 路径必须都能解析（相对 app 根）
+    const missing = paths.filter((p) => !fs.existsSync(path.join(appDir, String(p))));
+
+    // 模板里必须是相对路径：写绝对路径的话，用户把软件装到别的盘就全失效，
+    // 而且不报错、只是界面静默变英文。这条最容易漏，因为在开发机上永远正常。
+    const absolute = paths.filter((p) => /^[A-Za-z]:[\\/]|^\//.test(String(p)));
+
+    // 条数下限：1.85.0 的语言包是 88 条（vscode 主体 + 87 个内置扩展）。
+    // 少于 80 说明解压不完整或版本对不上——缺哪条，对应那部分界面就会
+    // 回退英文，而不会报任何错。
+    const MIN = 80;
+
+    tplOk = locales.includes("zh-cn") && paths.length >= MIN && missing.length === 0 && absolute.length === 0;
+    tplDetail =
+      `${locales.join(",")} / ${paths.length} 条（需 ≥${MIN}）/ 缺 ${missing.length} / 绝对路径 ${absolute.length}`;
+    if (absolute.length) tplDetail += `  例：${absolute[0]}`;
   } catch (e) {
     tplDetail = `模板不是合法 JSON：${e.message}`;
   }
 }
-check("languagepack 模板完整", tplOk, tplDetail);
+check("languagepack 模板完整（相对路径、条数足够）", tplOk, tplDetail);
 
 // 扩展目录：目录名必须是 manifest.name（写成 <publisher>.<name> 会静默失效）
 const extBase = path.join(appDir, "extensions");

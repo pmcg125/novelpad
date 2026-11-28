@@ -2,18 +2,28 @@
 /**
  * `verify-shell-defaults.mjs` 的判据自检。
  *
- *   node shell/scripts/verify-shell-defaults-selftest.mjs <应用根目录>
+ *   node shell/scripts/verify-shell-defaults-selftest.mjs
  *
- * ── 为什么守卫脚本自己也需要自检 ──
+ * ── 为什么不读真实产物 ──
  *
- * 初版的判据是「在 security.workspace.trust.enabled 附近找 default」。
- * 实际产物里那个键名只出现在常量定义处（`exports.$9kb = '...'`），
- * 真正的配置块在 110 万字符之外。于是脚本永远输出「unknown」——
- * 看起来在检查，其实既不会过也不会对。
+ * 第一版拿「构建产物」当夹具，在 CI 里必然失败：CI 产物是
+ * `apply.mjs` 改源码 → gulp 编译出来的，**本身就是打过补丁的**。
+ * 于是「未打补丁必须红」这一条前提不成立，脚本红得莫名其妙。
  *
- * 这种「只会报错的守卫」比没有守卫更糟：真问题会被淹在常红的噪声里。
- * 所以用它自己的正反例证明它能分辨对错：未打补丁必须红，打上必须绿，
- * 改回去必须重新红。
+ * 想靠「从产物里把补丁剥掉」来造基线也太脆：补丁内容会变、压缩后
+ * 形态会变，剥不干净就变成假的绿或假的红。
+ *
+ * 改成**自己合成最小夹具**：几个几十行的假文件，分别覆盖
+ * 「有/没有」每种特征。判据只看这几处文本，合成样本足够，而且完全
+ * 确定——不受构建产物影响，也就不会因为上游改版而莫名其妙飘。
+ *
+ * ── 自检要证明什么 ──
+ *
+ *   1. 三项核心缺失都在时，必须红且逐项点名
+ *   2. 补上之后必须绿
+ *   3. 把任意一项改回坏值，必须重新红（逐项）
+ *   4. 语言包模板用绝对路径时，必须红（这条最容易漏——它不报错，
+ *      只在用户换盘安装后静默变英文）
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -23,131 +33,291 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, "verify-shell-defaults.mjs");
-
-const SRC = process.argv[2];
-if (!SRC) {
-  console.error("用法：verify-shell-defaults-selftest.mjs <已构建的应用根目录（resources/app）>");
-  console.error("需要真实产物：out/main.js、workbench.desktop.main.js、languagepack 模板与扩展");
-  process.exit(2);
-}
-
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "np-selftest-"));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "np-defaults-"));
 const log = (s) => console.log(`[selftest] ${s}`);
 
-fs.mkdirSync(path.join(tmp, "out", "vs", "workbench"), { recursive: true });
-fs.mkdirSync(path.join(tmp, "extensions"), { recursive: true });
+/* ============================================================
+ * 合成一个「最小可判定」的应用根
+ *
+ * 结构与真实产物一致：
+ *   <app>/out/main.js                        ← 检查 locale / bootstrap
+ *   <app>/out/vs/workbench/workbench.desktop.main.js   ← 检查信任开关
+ *   <app>/novelpad-languagepack.json         ← 检查模板
+ *   <app>/extensions/vscode-language-pack-zh-hans/package.json
+ *   <app>/extensions/vscode-language-pack-zh-hans/translations/main.i18n.json
+ * ============================================================ */
 
-/* ---------- 复制必需文件 ---------- */
-const need = ["out/main.js", path.join("out", "vs", "workbench", "workbench.desktop.main.js"), "novelpad-languagepack.json"];
-for (const rel of need) {
-  const from = path.join(SRC, rel);
-  if (!fs.existsSync(from)) {
-    console.error(`缺少 ${rel}（先跑 embed-language-pack.mjs / 构建产物）`);
-    process.exit(2);
+const FILE = {
+  /**
+   * 未打补丁的 main.js：有 argv 模板、没有 locale、没有 bootstrap。
+   *
+   * 注意 argv 那一行的转义层级——这是真产物（esbuild 输出）的形态：
+   *   `  "\t// Use software..."`   ← 双引号 + **真制表符**
+   * 而不是源码里的 `'\t// Use...'`（单引号 + 字面反斜杠 t）。
+   * 第一版夹具写成单引号形态，导致「打上补丁」的替换没命中，
+   * 自检反而报了个假红。夹具必须与真产物一致才有判定力。
+   */
+  mainClean: [
+    "var args = parseCLIArgs();",
+    "var argvConfig = configureCommandlineSwitchesSync(args);",
+    "function createDefaultArgvConfigSync(p) {",
+    "  const defaultArgvConfigContent = [",
+    '    "// comment",',
+    '    "{",',
+    '    "\t// Use software rendering instead of hardware accelerated rendering.",',
+    '    "}"',
+    "  ];",
+    "}",
+    "function getUserDefinedLocale(c) { return c.locale; }",
+    "var locale = getUserDefinedLocale(argvConfig);",
+  ].join("\n"),
+
+  /** 未打补丁的 workbench：信任默认 true */
+  wbClean: [
+    "exports.$9kb = 'security.workspace.trust.enabled';",
+    "platform_1.$tn.as(configurationRegistry_1.$yn.Configuration).registerConfiguration({",
+    "  properties: {",
+    "    [workspaceTrust_2.$9kb]: {",
+    "      type: 'boolean',",
+    "      default: true,",
+    "      description: 'x',",
+    "    },",
+    "    [workspaceTrust_2.$alb]: {",
+    "      type: 'boolean',",
+    "      default: true,",
+    "    },",
+    "  }",
+    "});",
+  ].join("\n"),
+};
+
+/** 造模板：relative=true 用相对路径，false 用绝对路径（应当被判红） */
+function template(opts = {}) {
+  const { relative = true, count = 88 } = opts;
+  const translations = {};
+  for (let i = 0; i < count; i++) {
+    const key = i === 0 ? "vscode" : `vscode.k${i}`;
+    translations[key] = relative
+      ? `extensions/vscode-language-pack-zh-hans/translations/${i === 0 ? "main" : `k${i}`}.i18n.json`
+      : `/opt/app/extensions/vscode-language-pack-zh-hans/translations/${i === 0 ? "main" : `k${i}`}.i18n.json`;
   }
-  const to = path.join(tmp, rel);
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(from, to);
-}
-const lpSrc = path.join(SRC, "extensions", "vscode-language-pack-zh-hans");
-if (fs.existsSync(lpSrc)) {
-  fs.cpSync(lpSrc, path.join(tmp, "extensions", "vscode-language-pack-zh-hans"), { recursive: true });
+  return JSON.stringify(
+    {
+      "zh-cn": {
+        hash: "a".repeat(32),
+        extensions: [{ extensionIdentifier: { id: "ms-ceintl.vscode-language-pack-zh-hans" }, version: "1.85.0" }],
+        translations,
+        label: "中文(简体)",
+      },
+    },
+    null,
+    2,
+  );
 }
 
-const run = () => {
+/** 建一个应用根；overrides 里可替换任意文件内容 */
+function makeApp(opts = {}) {
+  const root = fs.mkdtempSync(path.join(tmp, "app-"));
+  const dirs = [
+    "out/vs/workbench",
+    "extensions/vscode-language-pack-zh-hans/translations",
+  ];
+  for (const d of dirs) fs.mkdirSync(path.join(root, d), { recursive: true });
+
+  fs.writeFileSync(path.join(root, "out/main.js"), opts.main ?? FILE.mainClean, "utf8");
+  fs.writeFileSync(path.join(root, "out/vs/workbench/workbench.desktop.main.js"), opts.wb ?? FILE.wbClean, "utf8");
+
+  const tpl = opts.template ?? template();
+  fs.writeFileSync(path.join(root, "novelpad-languagepack.json"), tpl, "utf8");
+
+  // 模板里每条路径都要真实存在，否则「模板完整」那项会红
+  let parsed;
   try {
-    const out = execFileSync(process.execPath, [script, tmp], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    parsed = JSON.parse(tpl);
+  } catch {
+    parsed = null;
+  }
+  if (opts.createFiles !== false && parsed) {
+    for (const p of Object.values(parsed["zh-cn"]?.translations ?? {})) {
+      if (String(p).startsWith("/")) continue; // 绝对路径故意不建，验证「换盘失效」能被抓到
+      const full = path.join(root, p);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, "{}", "utf8");
+    }
+  }
+
+  // 语言包扩展：目录名必须等于 manifest.name
+  const extName = opts.extDirName ?? "vscode-language-pack-zh-hans";
+  const extDir = path.join(root, "extensions", extName);
+  fs.mkdirSync(extDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(extDir, "package.json"),
+    JSON.stringify(
+      {
+        name: opts.extManifestName ?? "vscode-language-pack-zh-hans",
+        publisher: "MS-CEINTL",
+        version: "1.85.0",
+        contributes: { localizations: [{ languageId: "zh-cn", languageName: "Chinese" }] },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  return root;
+}
+
+function run(appDir) {
+  try {
+    const out = execFileSync(process.execPath, [script, appDir], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return { code: 0, out };
   } catch (e) {
     return { code: e.status ?? 1, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
   }
-};
-
-/* ---------- 1. 未打补丁：必须红 ---------- */
-const before = run();
-const beforeFails = (before.out.match(/^FAIL/gm) ?? []).length;
-console.log(`\n未打补丁：exit=${before.code} FAIL=${beforeFails} 项`);
-// 不写死项数：判据会随需求增加（这次就从 3 项变 4 项）。
-// 要守的是「至少三项核心缺失都被抓到」且 exit 非零。
-const mustCatch = ["工作区信任默认关闭", "argv.json 默认 locale", "bootstrap"];
-const caught = mustCatch.filter((k) => new RegExp(`FAIL\\s+${k}`).test(before.out));
-const redOk = before.code !== 0 && beforeFails >= 3 && caught.length === mustCatch.length;
-if (!redOk) {
-  console.log("  未抓到的核心项：", mustCatch.filter((k) => !caught.includes(k)).join(", ") || "(无，但 exit/项数不对)");
 }
 
-/* ---------- 2. 打上补丁 ---------- */
-const outMain = path.join(tmp, "out", "main.js");
-let main = fs.readFileSync(outMain, "utf8");
+const fails = (out) => (out.match(/^FAIL/gm) ?? []).length;
+const hasFail = (out, key) => new RegExp(`FAIL\\s+${key}`).test(out);
 
-// argv 模板：加一行 locale（产物里是字符串数组元素，含真制表符）
-// 用 indexOf 定位真实行，避免转义层级写错（踩过一次：写成裸对象属性，
-// 主进程 SyntaxError 直接崩）。
-const argvLineStart = main.indexOf('"\t// Use software rendering instead of hardware accelerated rendering."');
-if (argvLineStart < 0) {
-  console.error("找不到 argv 模板锚点");
-  process.exit(3);
-}
-const lineBegin = main.lastIndexOf("\n", argvLineStart) + 1;
-const indent = main.slice(lineBegin, argvLineStart);
-main = main.slice(0, lineBegin) + `${indent}"\\t\\"locale\\": \\"zh-cn\\",",\n${indent}"",\n` + main.slice(lineBegin);
+/* ============================================================
+ * 夹具：一个「全部打对」的应用根
+ * ============================================================ */
 
-// bootstrap：必须在 argvConfig 求值**之前**调用（那一行内部就读 argv.json）
-const argvCall = "var argvConfig = configureCommandlineSwitchesSync(args);";
-if (main.split(argvCall).length - 1 !== 1) {
-  console.error("argvConfig 锚点不唯一");
-  process.exit(3);
-}
-main = main.replace(
-  argvCall,
-  [
-    "function ensureNovelPadBootstrapSync() {",
-    "  var argvFile = getArgvConfigPath();",
-    "  if (!fs.existsSync(argvFile)) { fs.writeFileSync(argvFile, '{\"locale\": \"zh-cn\"}'); }",
-    "  var udp = getUserDataPath(args, product.nameShort || 'code-oss-dev');",
-    "  var tpl = path.join(__dirname, '..', 'novelpad-languagepack.json');",
-    "}",
-    "ensureNovelPadBootstrapSync();",
-    argvCall,
-  ].join("\n"),
+/* ============================================================
+ * 夹具：「全部打对」的应用根
+ *
+ * 直接构造正确形态，不做「先插再重排」那种绕的变换——变换本身也容易写错，
+ * 而这里要验的恰恰是判据，不是变换技巧。
+ * ============================================================ */
+
+/** 打过补丁的 main.js：locale 进模板 + bootstrap 早于 argvConfig */
+const patchedMainCorrect = [
+  "var args = parseCLIArgs();",
+  // 正确时序：bootstrap 先跑
+  "ensureNovelPadBootstrapSync();",
+  "var argvConfig = configureCommandlineSwitchesSync(args);",
+  "function ensureNovelPadBootstrapSync() {",
+  "  var argvFile = getArgvConfigPath();",
+  "  var udp = getUserDataPath(args, product.nameShort);",
+  "  var tpl = path.join(__dirname, '..', 'novelpad-languagepack.json');",
+  "}",
+  "function createDefaultArgvConfigSync(p) {",
+  "  const defaultArgvConfigContent = [",
+  '    "// comment",',
+  '    "{",',
+  // 编译产物形态：内层引号被转义
+  '    "\\t\\"locale\\": \\"zh-cn\\",",',
+  '    "",',
+  '    "\t// Use software rendering instead of hardware accelerated rendering.",',
+  '    "}"',
+  "  ];",
+  "}",
+  "function getUserDefinedLocale(c) { return c.locale; }",
+  "var locale = getUserDefinedLocale(argvConfig);",
+].join("\n");
+
+const patchedWb = FILE.wbClean.replace(
+  "      type: 'boolean',\n      default: true,\n      description: 'x',",
+  "      type: 'boolean',\n      default: false,\n      description: 'x',",
 );
-fs.writeFileSync(outMain, main, "utf8");
 
-const wbPath = path.join(tmp, "out", "vs", "workbench", "workbench.desktop.main.js");
-let wb = fs.readFileSync(wbPath, "utf8");
-const trustUse = /(\[workspaceTrust_2\.\$9kb\]:\s*\{\s*type:\s*'boolean',\s*\n\s*)default:\s*true,/;
-if (!trustUse.test(wb)) {
-  console.error("找不到信任配置块（上游产物结构变了，自检需要更新）");
-  process.exit(3);
+const cases = [];
+
+/* ---------- 1. 干净基线：必须红，且逐项点名 ---------- */
+{
+  const app = makeApp({ main: FILE.mainClean, wb: FILE.wbClean });
+  const r = run(app);
+  const caughtAll =
+    hasFail(r.out, "工作区信任默认关闭") && hasFail(r.out, "argv.json 默认 locale") && hasFail(r.out, "bootstrap");
+  cases.push({
+    name: "干净基线（三项都缺）→ 红且逐项点名",
+    ok: r.code !== 0 && fails(r.out) >= 3 && caughtAll,
+    out: r.out,
+  });
 }
-wb = wb.replace(trustUse, "$1default: false,");
-fs.writeFileSync(wbPath, wb, "utf8");
-log("已模拟打上 3 处补丁");
 
-/* ---------- 3. 打完：必须绿 ---------- */
-const after = run();
-console.log(`\n打完补丁：exit=${after.code}`);
-console.log(after.out);
-const greenOk = after.code === 0;
+/* ---------- 2. 全部打对：必须绿 ---------- */
+{
+  const app = makeApp({ main: patchedMainCorrect, wb: patchedWb });
+  const r = run(app);
+  cases.push({ name: "三项都打对 → 绿", ok: r.code === 0, out: r.out });
+}
 
-/* ---------- 4. 反向：信任改回 true，必须重新红 ---------- */
-wb = wb.replace(/(\[workspaceTrust_2\.\$9kb\][\s\S]{0,400}?default:\s*)false,/, "$1true,");
-fs.writeFileSync(wbPath, wb, "utf8");
-const again = run();
-const trustBackRed = /FAIL\s+工作区信任默认关闭/.test(again.out);
+/* ---------- 3. 逐项改回坏值，必须重新红 ---------- */
+{
+  const app = makeApp({ main: FILE.mainClean, wb: patchedWb });
+  const r = run(app);
+  cases.push({ name: "只缺 locale + bootstrap → 红", ok: r.code !== 0 && hasFail(r.out, "argv.json 默认 locale"), out: r.out });
+}
+{
+  const app = makeApp({ main: patchedMainCorrect, wb: FILE.wbClean });
+  const r = run(app);
+  cases.push({ name: "只把信任改回 true → 红", ok: r.code !== 0 && hasFail(r.out, "工作区信任默认关闭"), out: r.out });
+}
 
-/* ---------- 汇总 ---------- */
-console.log("=== 自检结果 ===");
-const checks = [
-  ["未打补丁时正确报红（3 项）", redOk],
-  ["打上补丁后全绿", greenOk],
-  ["信任改回 true 后立刻报红", trustBackRed],
-];
+/* ---------- 4. bootstrap 时序错（晚于 argvConfig）：必须红 ---------- */
+{
+  // 把调用挪到 argvConfig 之后
+  const wrongOrder = patchedMainCorrect.replace(
+    "ensureNovelPadBootstrapSync();\nvar argvConfig = configureCommandlineSwitchesSync(args);",
+    "var argvConfig = configureCommandlineSwitchesSync(args);\nensureNovelPadBootstrapSync();",
+  );
+  const app = makeApp({ main: wrongOrder, wb: patchedWb });
+  const r = run(app);
+  cases.push({ name: "bootstrap 晚于 argvConfig → 红", ok: r.code !== 0 && hasFail(r.out, "bootstrap 早于"), out: r.out });
+}
+
+/* ---------- 5. 模板用绝对路径：必须红（换盘失效，且不报错） ---------- */
+{
+  const app = makeApp({ main: patchedMainCorrect, wb: patchedWb, template: template({ relative: false }) });
+  const r = run(app);
+  cases.push({ name: "模板用绝对路径 → 红（换盘静默失效）", ok: r.code !== 0, out: r.out });
+}
+
+/* ---------- 6. 语言包目录名与 manifest.name 不一致：必须红 ---------- */
+{
+  const app = makeApp({
+    main: patchedMainCorrect,
+    wb: patchedWb,
+    extDirName: "ms-ceintl.vscode-language-pack-zh-hans",
+    extManifestName: "vscode-language-pack-zh-hans",
+  });
+  const r = run(app);
+  cases.push({ name: "语言包目录名错 → 红（会被静默跳过）", ok: r.code !== 0, out: r.out });
+}
+
+/* ---------- 7. 模板翻译条数不足：必须红 ---------- */
+{
+  const app = makeApp({ main: patchedMainCorrect, wb: patchedWb, template: template({ count: 10 }) });
+  const r = run(app);
+  cases.push({ name: "模板翻译条数不足 → 红", ok: r.code !== 0, out: r.out });
+}
+
+/* ============================================================
+ * 汇总
+ * ============================================================ */
+console.log("");
 let bad = 0;
-for (const [n, ok] of checks) {
-  console.log(`${ok ? "PASS" : "FAIL"}  ${n}`);
-  if (!ok) bad++;
+for (const c of cases) {
+  console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name}`);
+  if (!c.ok) {
+    bad++;
+    console.log(
+      "  ---- 实际输出 ----\n" +
+        c.out
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => "  " + l)
+          .join("\n"),
+    );
+  }
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
-process.exit(bad ? 1 : 0);
+console.log("");
+if (bad) {
+  console.error(`判据自检失败 ${bad} 项`);
+  process.exit(1);
+}
+log(`壳默认值判据自检 ${cases.length}/${cases.length} 通过（合成夹具，不依赖构建产物）`);
