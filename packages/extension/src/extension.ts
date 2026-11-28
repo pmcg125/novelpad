@@ -20,6 +20,7 @@ import { openTimeline, openTimelineAIOnly, refreshTimeline } from "./views/timel
 import { closeStudioIfIdle, maybeOpenStudio, openStudio, refreshStudio } from "./views/studio";
 import { BranchManager, listMergeableBranches } from "./features/branches";
 import { applyShellTheme } from "./features/shell-theme";
+import { scheduleShellMeasure } from "./features/measure";
 import {
   AutoPusher,
   HostStatusBar,
@@ -34,6 +35,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new ProjectStore();
   const chapters = new ChaptersProvider(store);
   const entities = new EntitiesProvider(store);
+
+  // 延迟任务句柄：deactivate / dispose 时要清掉，否则进程退出前还会碰
+  // 已经销毁的布局服务。
+  let measureTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push({ dispose: () => measureTimer && clearTimeout(measureTimer) });
 
   // 壳外观：把自带主题设成默认值。
   //
@@ -327,6 +333,10 @@ export function activate(context: vscode.ExtensionContext): void {
     store.startWatching();
     // 刷新完成后再判断：作品名与字数要能立刻显示在书房首页上
     maybeOpenStudio(context, store);
+    // 正文栏宽：壳里第一次进这个工作区时切成居中版式。
+    // 放在书房之后是有意的——它比书房晚 800ms 触发，等 webview 就位
+    // 再排版，居中一次算准，不会出现「先居中书房、再重排」的闪动。
+    measureTimer = scheduleShellMeasure(context);
   });
 }
 
