@@ -403,8 +403,8 @@ clp 缓存生成（真读了翻译）    ✓
 | `verify-patch-003.mjs` | **17/17**（含真跑 `git apply` + argv 模板求值） |
 | `verify-shell-defaults-selftest.mjs` | **3/3**（未打补丁红 / 打上绿 / 改回红） |
 | `check-gate.mjs` | 10/10 |
-| `check-workflow-shells.mjs` | 4 个 workflow 全过 |
-| `check-workflow-shells-selftest.mjs` | **5/5**（含「ubuntu-only 不误报」） |
+| `check-workflow-shells.mjs` | 4 个 workflow 全过（零依赖） |
+| `check-workflow-shells-selftest.mjs` | **8/8**（含扫描器自身正确性） |
 
 新增的守卫都是「先证明它能分辨对错」才接进 CI：产物体检用合成 zip 做正反
 16 例，壳默认值用真实产物做正反 3 例，补丁用临时目录真跑 `git apply` 并
@@ -543,6 +543,28 @@ hunk 头是手算的，数错一个数字就报 `corrupt patch`；更隐蔽的�
   表现为端口永远不开。
 - **改运行时的 `workbench.desktop.main.js` 会让完整性校验红掉**，弹「安装似乎
   损坏」。真实构建里补丁在 gulp 之前应用、checksums 在编译之后计算，不会出现。
+- 守卫脚本**不要依赖 node_modules**：`patch-check` 为了秒级出结果，把所有
+  静态检查放在 `pnpm install` 之前。用 js-yaml 解析 workflow 就栽在这上面
+  （报「找不到 js-yaml」）。需要的话手写极简扫描器，或把这一步挪到 install 之后。
+- 守卫的**夹具不要拿构建产物**：CI 产物是打过补丁的，而自检常要断言
+  「未打补丁必须红」。用合成的最小夹具，几十行假文件就够，且完全确定。
+- **同一个判据在不同层写法不同**，比如 locale：源码是 `'\t"locale": "zh-cn",'`、
+  编译产物是 `"\t\"locale\": \"zh-cn\","`、argv.json 成品是 `"locale": "zh-cn"`。
+  判据要认全三种，否则在真实产物上永远红——而这个漏洞只有在守卫真被跑到
+  时才暴露。
+
+### 排查方法：先批量，再统一修
+
+连续踩了多次「修一处坏一处」，都是因为在 CI 上逐个试（一次 35 分钟）。
+正确做法是**先把可能原因全列出来一次性验证**：
+
+1. 把失败步骤的日志一次抓全，不要一次只看一条报错
+2. 对每个失败项问「这个脚本在 CI 环境里和本地有什么不同」——
+   依赖？路径？平台？产物状态？（本轮四个可能原因里有两个就是「产物状态」）
+3. 本地造出**与 CI 相同的环境**再验证：无 `node_modules`、已打补丁的产物、
+   空 userData。造不出来就先别推
+4. 修完跑一遍**全量回归**（所有守卫一起跑），别只跑刚改的那个
+5. 提交信息里写清「为什么会出现这类问题」，不只是「改了什么」
 
 ---
 
