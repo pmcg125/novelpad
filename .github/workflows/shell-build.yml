@@ -360,6 +360,11 @@ jobs:
       - name: 检查主题颜色完整性
         run: node shell/scripts/check-themes.mjs packages/extension
 
+      # 默认主题名必须与扩展声明的 name 逐字一致。差一个字符，上游就
+      # 静默回退到内置蓝色主题——界面是蓝色、不报错、列表里看着都正常。
+      - name: 检查默认主题名匹配
+        run: node shell/scripts/check-theme-defaults-match.mjs
+
       # 构建闸门：push / tag 事件里没有 inputs，`inputs.gulpBuild != false`
       # 会被 null 的隐式转换判成 true，于是每次 push 都产出空壳却全绿。
       # 这段直接从 workflow 抠 bash 正文跑，改 workflow 不用改这里。
