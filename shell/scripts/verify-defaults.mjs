@@ -232,5 +232,41 @@ if (undeclared.length) {
 }
 if (!bad.length && !unknown.length) console.log("全部键合法且可在上游找到定义 ✓");
 
-const failed = bad.length > 0 || undeclared.length > 0;
+/**
+ * 受限模式能力声明。
+ *
+ * 这条很容易被忽略，但后果很重：package.json 里没有
+ * capabilities.untrustedWorkspaces.supported 时，上游默认按
+ * supported=false 处理（extensionManifestPropertiesService.ts:185），
+ * 于是**未信任的工作区里扩展完全不激活**——主题、书房、侧栏、栏宽
+ * 全都不跑，界面看起来像「什么都没做」，日志里也没有任何报错
+ * （expthost.log 里连 novelpad 这行都不出现）。
+ *
+ * 实测：不加这个字段时 exthost.log 里只有 vscode.git-base / vscode.github；
+ * 加上后 novelpad.novelpad 正常激活，主题与栏宽立刻生效。
+ *
+ * 类型也要对：supported 只接受 true / false / "limited"。
+ * 写错（比如 "yes"）会被当成不支持。
+ */
+const untrusted = pkg.capabilities?.untrustedWorkspaces;
+const untrustedOk =
+  untrusted !== undefined &&
+  (untrusted.supported === true || untrusted.supported === "limited") &&
+  (untrusted.supported !== "limited" || typeof untrusted.description === "string");
+const extra = [];
+if (untrusted !== undefined && untrusted.supported === "limited" && !untrusted.description) {
+  extra.push("supported 为 limited 时必须给 description（上游会显示给用户）");
+}
+
+console.log("");
+if (!untrustedOk) {
+  console.log("✗ capabilities.untrustedWorkspaces 缺失或类型不对");
+  console.log("  没有它 → 解锁前的工作区里扩展完全不激活，界面像「没做皮肤」，无报错");
+  console.log(`  当前值：${JSON.stringify(untrusted)}`);
+  for (const e of extra) console.log(`  ✗ ${e}`);
+} else {
+  console.log("受限模式能力声明正确 ✓（未信任工作区里也会激活）");
+}
+
+const failed = bad.length > 0 || undeclared.length > 0 || !untrustedOk;
 process.exit(failed ? 1 : 0);

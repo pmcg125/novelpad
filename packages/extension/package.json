@@ -27,6 +27,13 @@
     "workspaceContains:chapters",
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "作者的稿件是 Markdown / YAML 设定，不是可执行代码。本扩展只读写作品目录里的文本与本地 git 仓库（版本管理），不执行任何来自工作区的代码，因此在受限模式下可以完整工作。"
+    },
+    "virtualWorkspaces": false
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
