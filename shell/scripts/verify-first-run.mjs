@@ -122,20 +122,52 @@ sleep(3000);
 
 /* ============================================================
  * 启动
+ *
+ * ── 为什么用环境变量传参，而不是拼引号 ──
+ *
+ * 踩过两次，都是引号层级：
+ *
+ *   1. 单引号包参数：`-ArgumentList '--user-data-dir="C:\x"'`
+ *      PowerShell 单引号内不解析，但引号会被算进值里，exe 拿到
+ *      `"C:\x"`（带引号）→ userData 建到别处 → 后面查文件全找不到，
+ *      看起来像「bootstrap 没跑」。
+ *
+ *   2. 双引号 + 反斜杠转义 `\"`：PowerShell 的转义符是**反引号**不是
+ *      反斜杠，`\"` 会被解析成「反斜杠 + 字符串结束」，直接语法错。
+ *
+ * 两轮都栽在这上面，说明「在 JS 字符串里拼 PowerShell 引号」这条路本身
+ * 不可靠。改成：把路径放进环境变量，PowerShell 里用 `$env:NP_UD` 引用。
+ * 环境变量不经过 shell 解析，路径里有空格、引号、中文都不会坏。
+ *
+ * 另外 `-ArgumentList @(...)` 在这个上下文里也踩过（Start-Process 报
+ * 「找不到位置参数」），所以改成先把参数拼成一个字符串再传。
  * ============================================================ */
 const workDir = process.env.NP_WORKSPACE || "";
 const startedAt = Date.now();
-const argList = [
-  workDir ? `"${workDir}"` : "",
-  `--user-data-dir="${userData}"`,
-  `--remote-debugging-port=${PORT}`,
-  "--skip-welcome",
-  "--skip-release-notes",
+
+const env = {
+  ...process.env,
+  NP_EXE: exe,
+  NP_UD: userData,
+  NP_PORT: String(PORT),
+  NP_WORKDIR: workDir,
+};
+
+// 拼成单个字符串给 -ArgumentList。PowerShell 里用单引号包住每个片段，
+// 变量在字符串拼接处展开——这样路径里的空格不会被当成参数分隔符。
+const psScript = [
+  "$parts = @()",
+  workDir ? '  $parts += \'"\' + $env:NP_WORKDIR + \'"\'' : "",
+  '  $parts += \'"--user-data-dir=\' + $env:NP_UD + \'"\'',
+  '  $parts += \'"--remote-debugging-port=\' + $env:NP_PORT + \'"\'',
+  '  $parts += \'"--skip-welcome"\'',
+  '  $parts += \'"--skip-release-notes"\'',
+  "Start-Process -FilePath $env:NP_EXE -ArgumentList ($parts -join ' ')",
 ]
   .filter(Boolean)
-  .join(",");
+  .join("\n");
 
-execFileSync("powershell", ["-NoProfile", "-Command", `Start-Process -FilePath '${exe}' -ArgumentList ${argList.split(",").map((a) => `'${a}'`).join(",")}`]);
+execFileSync("powershell", ["-NoProfile", "-Command", psScript], { env });
 
 /* ============================================================
  * 等窗口：轮询到真能连上，而不是睡固定秒数
