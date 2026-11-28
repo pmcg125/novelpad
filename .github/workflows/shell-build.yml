@@ -253,6 +253,21 @@ jobs:
       - name: 检查壳默认值
         run: node shell/scripts/verify-shell-defaults.mjs "${{ matrix.out }}/resources/app"
 
+      # 首启动真机验收：前面所有检查都只能证明「产物里包含这些默认值」，
+      # 而用户看到的是运行结果。中间隔着三层容易静默失效的东西——
+      # bootstrap 读错路径、语言包目录名不匹配、扩展压根没激活。
+      # 这三种都不报错，界面只是「看起来没做」。
+      #
+      # windows runner 有桌面会话，能真启动窗口；用 CDP 读真实计算值，
+      # 不靠截图（截屏拿到的是最上层窗口，CI 上不可靠）。
+      #
+      # 放在打包**之前**：打包步骤会把产物目录改名成 NovelPad，
+      # 那之后 exe 的相对位置就变了。
+      - name: 首启动验收（真机）
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: node shell/scripts/verify-first-run.mjs "${{ matrix.out }}/resources/app" --expect zh-cn --port 9310
+
       - name: 打包
         shell: bash
         run: |
