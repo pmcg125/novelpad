@@ -255,9 +255,9 @@ refs/novelpad/publish/<tag>        发布版，永久
 | `prepare` | 计算 `gulp=true/false`、生成矩阵（默认仅 windows） |
 | `build-extension` | 构建并打包 `novelpad.vsix` |
 | `shell` | checkout 上游 1.85.0 → overlay/patches → 依赖 → `gulp vscode-win32-x64` → 嵌入扩展 → 取语言包 → 内置语言包 → 两个默认值守卫 → zip |
-| `patch-check` | 不编译，验证补丁可重放 + 11 项静态检查 |
+| `patch-check` | 不编译，验证补丁可重放 + 13 项静态检查 |
 
-`patch-check` 的 11 项检查：
+`patch-check` 的 13 项检查：
 
 1. 内置扩展链路
 2. 验证壳默认值补丁（真跑 `git apply` + argv 模板求值，17 项）
@@ -266,10 +266,18 @@ refs/novelpad/publish/<tag>        发布版，永久
 5. 字体分片
 6. 字形覆盖
 7. 主题颜色完整性
-8. 构建闸门
-9. 版本管理端到端（真实 git）
-10. 产物体检判据自检（16 例合成 zip）
-11. 补丁重放
+8. 构建闸门（7 种事件组合）
+9. workflow shell 安全性
+10. workflow shell 判据自检（5 例）
+11. 版本管理端到端（真实 git）
+12. 产物体检判据自检（16 例合成 zip）
+13. 补丁重放
+
+**workflow shell 守卫为什么必要**：windows runner 默认 shell 是
+PowerShell，不认 bash 的 `\` 续行。这类错误只有 windows job 真跑到那一步
+才暴露，而前面的 gulp 编译要 30 分钟——本轮就是编译成功之后才炸在
+`内置中文语言包` 上，报错是 `ParserError: Unexpected token '\'`，
+与「跑一个 node 脚本」看起来毫无关系。
 
 `shell` job 里另有 4 步与首启动默认值相关：
 
@@ -395,6 +403,8 @@ clp 缓存生成（真读了翻译）    ✓
 | `verify-patch-003.mjs` | **17/17**（含真跑 `git apply` + argv 模板求值） |
 | `verify-shell-defaults-selftest.mjs` | **3/3**（未打补丁红 / 打上绿 / 改回红） |
 | `check-gate.mjs` | 10/10 |
+| `check-workflow-shells.mjs` | 4 个 workflow 全过 |
+| `check-workflow-shells-selftest.mjs` | **5/5**（含「ubuntu-only 不误报」） |
 
 新增的守卫都是「先证明它能分辨对错」才接进 CI：产物体检用合成 zip 做正反
 16 例，壳默认值用真实产物做正反 3 例，补丁用临时目录真跑 `git apply` 并
