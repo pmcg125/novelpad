@@ -99,7 +99,28 @@ const hasLocale =
   /["']locale['"]\s*:\s*["']zh-cn["']/.test(main); // 兜底
 check("argv.json 默认 locale = zh-cn", hasLocale, "out/main.js 的默认模板里没有 locale");
 
-/* ---------- 3. 首启动补齐 argv.json 与 languagepacks.json ---------- */
+/* ---------- 3. 平台级默认颜色主题 ---------- */
+//
+// 这条必须在产物里验，不能只在补丁层面验。补丁能 apply 不等于编译产物
+// 真的改了——中间隔着 gulp 的 bundle 步骤。
+//
+// 判据按结构找，不按字符串位置找：
+//   1) 找到 ThemeSettingDefaults 枚举所在区块
+//   2) 在里面看 COLOR_THEME_DARK / LIGHT 的值
+// 直接全文搜 'Default Dark Modern' 会误判——它可能出现在别处（比如
+// COLOR_THEME_DARK_OLD 或注释里）。
+const themeDefaultsBlock = /ThemeSettingDefaults\["COLOR_THEME_DARK"\]\s*=\s*"([^"]+)"[\s\S]{0,400}?ThemeSettingDefaults\["COLOR_THEME_LIGHT"\]\s*=\s*"([^"]+)"/.exec(wbSrc);
+let themeOk = false;
+let themeDetail = "找不到 ThemeSettingDefaults 的 DARK/LIGHT 定义";
+if (themeDefaultsBlock) {
+  const dark = themeDefaultsBlock[1];
+  const light = themeDefaultsBlock[2];
+  themeOk = dark.includes("NovelPad Ink") && light.includes("NovelPad Paper");
+  themeDetail = `dark="${dark}" light="${light}"`;
+}
+check("平台默认主题是夜墨/宣纸（不是蓝色 Default）", themeOk, themeDetail);
+
+/* ---------- 4. 首启动补齐 argv.json 与 languagepacks.json ---------- */
 // 函数名可能随重构变化，所以判据看「行为」而不是具体名字：
 //   既要补 argv.json（getArgvConfigPath），也要补 languagepacks.json（模板引用）。
 const hasBootstrap =

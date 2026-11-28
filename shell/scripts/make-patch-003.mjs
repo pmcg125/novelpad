@@ -166,6 +166,36 @@ const targets = [
     ],
   },
   {
+    file: "src/vs/workbench/services/themes/common/workbenchThemeService.ts",
+    edits: [
+      {
+        // NovelPad 的主题名（必须与 themes/*.json 里的 name 逐字一致）。
+        //
+        // 为什么改这里而不是靠扩展运行时写设置：
+        //   `ThemeSettingDefaults` 是**平台级默认值**，三个配置项都引用它：
+        //     colorThemeSettingSchema.default          = isWeb ? LIGHT : DARK
+        //     preferredDarkThemeSettingSchema.default  = DARK
+        //     preferredLightThemeSettingSchema.default = LIGHT
+        //   改这两个常量 = 编译期就生效，不依赖扩展激活、不写用户设置、
+        //   也不需要 `--disable-workspace-trust` 之类的绕过。
+        //
+        // 之前靠扩展写 settings 的做法有个固有缺陷：扩展没激活（受限模式、
+        // 激活失败）时界面退回蓝色 Default Dark Modern。现在从默认值层面
+        // 就是宣纸/夜墨，扩展只负责「跟随系统」这个开关。
+        find: "\tCOLOR_THEME_DARK = 'Default Dark Modern',\n\tCOLOR_THEME_LIGHT = 'Default Light Modern',",
+        replace: [
+          "\t// NovelPad：把平台级默认颜色主题换成自有主题。",
+          "\t// 三个配置项（workbench.colorTheme / preferredDarkColorTheme /",
+          "\t// preferredLightColorTheme）都引用这两个常量，改这里即可整体生效。",
+          "\t// 上游原值：'Default Dark Modern' / 'Default Light Modern'（蓝色主题）。",
+          "\tCOLOR_THEME_DARK = '夜墨 · NovelPad Ink',",
+          "\tCOLOR_THEME_LIGHT = '宣纸 · NovelPad Paper',",
+        ].join("\n"),
+        label: "默认颜色主题换成 NovelPad",
+      },
+    ],
+  },
+  {
     file: "src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts",
     edits: [
       {
@@ -228,7 +258,12 @@ for (const t of targets) {
     .replace(/^\+\+\+ .*$/m, `+++ b/${t.file}`);
   if (!rel.includes(`a/${t.file}`)) throw new Error(`${t.file}: 生成的 diff 路径不对`);
 
-  chunks.push(rel.trimEnd());
+  // 只去掉尾部换行，不能用 trimEnd()：
+  // git diff 的上下文行以单个空格开头，如果 hunk 最后一行恰好是空行
+  // （内容就是 " "），trimEnd 会把它变成空字符串——hunk 声明的行数
+  // 与实际内容不符，git apply 报 "corrupt patch"。
+  // 这个坑很隐蔽：只有 hunk 尾部正好是空行时才触发。
+  chunks.push(rel.replace(/\n+$/, ""));
   const delta = updated.split("\n").length - original.split("\n").length;
   console.log(`OK  ${t.file}  (${delta >= 0 ? "+" : ""}${delta} 行)`);
 }

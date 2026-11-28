@@ -72,7 +72,7 @@ const FILE = {
     "var locale = getUserDefinedLocale(argvConfig);",
   ].join("\n"),
 
-  /** 未打补丁的 workbench：信任默认 true */
+  /** 未打补丁的 workbench：信任默认 true + 默认主题是蓝色 */
   wbClean: [
     "exports.$9kb = 'security.workspace.trust.enabled';",
     "platform_1.$tn.as(configurationRegistry_1.$yn.Configuration).registerConfiguration({",
@@ -88,6 +88,13 @@ const FILE = {
     "    },",
     "  }",
     "});",
+    "var ThemeSettingDefaults;",
+    '(function (ThemeSettingDefaults) {',
+    '    ThemeSettingDefaults["COLOR_THEME_DARK"] = "Default Dark Modern";',
+    '    ThemeSettingDefaults["COLOR_THEME_LIGHT"] = "Default Light Modern";',
+    '    ThemeSettingDefaults["COLOR_THEME_HC_DARK"] = "Default High Contrast";',
+    '    ThemeSettingDefaults["COLOR_THEME_HC_LIGHT"] = "Default High Contrast Light";',
+    "})(ThemeSettingDefaults || (exports.ThemeSettingDefaults = ThemeSettingDefaults = {}));",
   ].join("\n"),
 };
 
@@ -217,10 +224,13 @@ const patchedMainCorrect = [
   "var locale = getUserDefinedLocale(argvConfig);",
 ].join("\n");
 
-const patchedWb = FILE.wbClean.replace(
-  "      type: 'boolean',\n      default: true,\n      description: 'x',",
-  "      type: 'boolean',\n      default: false,\n      description: 'x',",
-);
+const patchedWb = FILE.wbClean
+  .replace(
+    "      type: 'boolean',\n      default: true,\n      description: 'x',",
+    "      type: 'boolean',\n      default: false,\n      description: 'x',",
+  )
+  .replace('ThemeSettingDefaults["COLOR_THEME_DARK"] = "Default Dark Modern";', 'ThemeSettingDefaults["COLOR_THEME_DARK"] = "夜墨 · NovelPad Ink";')
+  .replace('ThemeSettingDefaults["COLOR_THEME_LIGHT"] = "Default Light Modern";', 'ThemeSettingDefaults["COLOR_THEME_LIGHT"] = "宣纸 · NovelPad Paper";');
 
 const cases = [];
 
@@ -292,6 +302,16 @@ const cases = [];
   const app = makeApp({ main: patchedMainCorrect, wb: patchedWb, template: template({ count: 10 }) });
   const r = run(app);
   cases.push({ name: "模板翻译条数不足 → 红", ok: r.code !== 0, out: r.out });
+}
+
+/* ---------- 8. 默认主题改回蓝色：必须红 ---------- */
+{
+  const blueWb = patchedWb
+    .replace('ThemeSettingDefaults["COLOR_THEME_DARK"] = "夜墨 · NovelPad Ink";', 'ThemeSettingDefaults["COLOR_THEME_DARK"] = "Default Dark Modern";')
+    .replace('ThemeSettingDefaults["COLOR_THEME_LIGHT"] = "宣纸 · NovelPad Paper";', 'ThemeSettingDefaults["COLOR_THEME_LIGHT"] = "Default Light Modern";');
+  const app = makeApp({ main: patchedMainCorrect, wb: blueWb });
+  const r = run(app);
+  cases.push({ name: "默认主题改回蓝色 → 红", ok: r.code !== 0 && hasFail(r.out, "平台默认主题"), out: r.out });
 }
 
 /* ============================================================

@@ -19,7 +19,11 @@ import { execFileSync } from "node:child_process";
 const TAG = "1.85.0";
 const RAW = `https://raw.githubusercontent.com/microsoft/vscode/${TAG}`;
 const PATCH = "shell/patches/003-shell-defaults.patch";
-const files = ["src/main.js", "src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts"];
+const files = [
+  "src/main.js",
+  "src/vs/workbench/services/themes/common/workbenchThemeService.ts",
+  "src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts",
+];
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "np-apply-"));
 
@@ -46,7 +50,8 @@ try {
 }
 
 const main = fs.readFileSync(path.join(root, "src/main.js"), "utf8");
-const ws = fs.readFileSync(path.join(root, files[1]), "utf8");
+const ws = fs.readFileSync(path.join(root, files[2]), "utf8");
+const themeSrc = fs.readFileSync(path.join(root, files[1]), "utf8");
 
 /* ---------- 语义检查 ---------- */
 const checks = [
@@ -92,6 +97,22 @@ const checks = [
   // 3. 信任
   ["信任机制默认关闭", /\[WORKSPACE_TRUST_ENABLED\][\s\S]{0,900}?default: false,/.test(ws)],
   ["「空窗口默认可信」未被误改", (ws.match(/default:\s*true,/g) ?? []).length === 1],
+  // 4. 平台级默认颜色主题
+  //
+  // 这是「第一默认主题」的唯一正确落点：ThemeSettingDefaults 被三个配置项
+  // 引用（colorTheme / preferredDark / preferredLight），改这两个常量
+  // 等于从平台默认值层面就换成自有主题，不依赖扩展运行时写设置。
+  ["默认深色主题换成夜墨", /COLOR_THEME_DARK = '夜墨 · NovelPad Ink',/.test(themeSrc)],
+  ["默认浅色主题换成宣纸", /COLOR_THEME_LIGHT = '宣纸 · NovelPad Paper',/.test(themeSrc)],
+  // 反例：这两个值不能再作为「默认」出现。注意不能整文件搜——文件里还有
+  // COLOR_THEME_DARK_OLD = 'Default Dark+' 等历史常量，那些必须保留。
+  // 只检查这两个具体的常量定义行是否还指向蓝色主题。
+  ["默认深色不再是 Default Dark Modern", !/COLOR_THEME_DARK = 'Default Dark Modern'/.test(themeSrc)],
+  ["默认浅色不再是 Default Light Modern", !/COLOR_THEME_LIGHT = 'Default Light Modern'/.test(themeSrc)],
+  // 历史常量原样保留（别为了「去蓝色」把上游的兼容值也删了）
+  ["历史常量 COLOR_THEME_DARK_OLD 保留", /COLOR_THEME_DARK_OLD = 'Default Dark\+'/.test(themeSrc)],
+  // HC 主题必须原样保留：高对比度是可达性功能，不能拿产品视觉主张覆盖
+  ["高对比度主题未被改动", /COLOR_THEME_HC_DARK = 'Default High Contrast',/.test(themeSrc) && /COLOR_THEME_HC_LIGHT = 'Default High Contrast Light',/.test(themeSrc)],
 ];
 let bad = 0;
 for (const [name, ok] of checks) {

@@ -86,6 +86,17 @@ export function isNovelPadShell(extensionPath: string): boolean {
  *
  * `window.autoDetectColorScheme` 打开后，`workbench.colorTheme` 就不再
  * 生效（上游按系统深浅去取 preferred* 两键），所以三个必须一起写。
+ *
+ * ── 与壳补丁的分工 ──
+ *
+ * 壳里 `ThemeSettingDefaults` 已经被改成宣纸/夜墨（见 003 补丁），也就是说
+ * **这两个键的平台默认值本来就是对的**。这里再写一次是幂等的双保险：
+ *
+ *   · 壳里：补丁已就位，即使扩展没激活也是宣纸/夜墨
+ *   · 标准 VS Code 里：补丁不存在，靠这里写一次（只在用户从未设过主题时）
+ *
+ * 保留这段写入的价值在于「标准 VS Code 里也要有像样的默认外观」——
+ * 那是「同一份扩展、两种宿主」的承诺。
  */
 export const SHELL_THEME_KEYS = {
   /** 打开「跟随系统」总开关 */

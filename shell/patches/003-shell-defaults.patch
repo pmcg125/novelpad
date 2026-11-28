@@ -98,6 +98,25 @@ index 7087474..f43c630 100644
  			'	// Use software rendering instead of hardware accelerated rendering.',
  			'	// This can help in cases where you see rendering issues in VS Code.',
  			'	// "disable-hardware-acceleration": true',
+diff --git a/src/vs/workbench/services/themes/common/workbenchThemeService.ts b/src/vs/workbench/services/themes/common/workbenchThemeService.ts
+index 22ebde5..48f93d6 100644
+--- a/src/vs/workbench/services/themes/common/workbenchThemeService.ts
++++ b/src/vs/workbench/services/themes/common/workbenchThemeService.ts
+@@ -41,8 +41,12 @@ export enum ThemeSettings {
+ }
+ 
+ export enum ThemeSettingDefaults {
+-	COLOR_THEME_DARK = 'Default Dark Modern',
+-	COLOR_THEME_LIGHT = 'Default Light Modern',
++	// NovelPad：把平台级默认颜色主题换成自有主题。
++	// 三个配置项（workbench.colorTheme / preferredDarkColorTheme /
++	// preferredLightColorTheme）都引用这两个常量，改这里即可整体生效。
++	// 上游原值：'Default Dark Modern' / 'Default Light Modern'（蓝色主题）。
++	COLOR_THEME_DARK = '夜墨 · NovelPad Ink',
++	COLOR_THEME_LIGHT = '宣纸 · NovelPad Paper',
+ 	COLOR_THEME_HC_DARK = 'Default High Contrast',
+ 	COLOR_THEME_HC_LIGHT = 'Default High Contrast Light',
+ 
 diff --git a/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts b/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts
 index 864a19e..4c1af78 100644
 --- a/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts
