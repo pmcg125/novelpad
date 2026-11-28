@@ -151,6 +151,48 @@ export function inspectArtifact({ entries, read, expectFlat = false }) {
   const fonts = entries.filter((e) => e.name.startsWith(`${EXT}media/fonts/`) && e.name.endsWith(".woff2"));
   check("字体分片齐全（>= 90 片）", fonts.length >= 90, `${fonts.length} 片`);
 
+  /* ---- 6b. 中文语言包与首启动模板 ---- */
+  //
+  // 这两样缺了都只是「界面变英文」，不会报任何错。语言包目录名必须等于
+  // manifest.name——写成 <publisher>.<name> 时扫描器认不出来，同样静默失效。
+  const LP = `${appRoot}resources/app/extensions/vscode-language-pack-zh-hans/`;
+  const lpEntry = byName.get(`${LP}package.json`);
+  check("中文语言包已内置", !!lpEntry);
+  if (lpEntry) {
+    try {
+      const pkg = JSON.parse(read(lpEntry.name).toString("utf8"));
+      const zh = (pkg.contributes?.localizations ?? []).find((l) => l.languageId === "zh-cn");
+      check("语言包声明 zh-cn", !!zh, (pkg.contributes?.localizations ?? []).map((l) => l.languageId).join(","));
+      check("语言包目录名与 manifest.name 一致", pkg.name === "vscode-language-pack-zh-hans", String(pkg.name));
+    } catch (e) {
+      check("语言包 package.json 可解析", false, String(e.message));
+    }
+  }
+  const lpMain = byName.get(`${LP}translations/main.i18n.json`);
+  check(
+    "语言包主翻译文件在场（> 500KB）",
+    !!lpMain && lpMain.size > 500 * 1024,
+    lpMain ? `${(lpMain.size / 1024).toFixed(0)} KB` : "缺失",
+  );
+
+  const tplEntry = byName.get(`${appRoot}resources/app/novelpad-languagepack.json`);
+  if (tplEntry) {
+    try {
+      const tpl = JSON.parse(read(tplEntry.name).toString("utf8"));
+      const pack = tpl["zh-cn"];
+      const count = Object.keys(pack?.translations ?? {}).length;
+      check("首启动语言包模板含 zh-cn", !!pack);
+      check("模板翻译条目齐全（>= 80）", count >= 80, `${count} 条`);
+      // 模板里必须是相对路径：绝对路径在用户换盘安装后全失效
+      const abs = Object.values(pack?.translations ?? {}).filter((p) => /^[a-zA-Z]:|^\//.test(String(p)));
+      check("模板用相对路径（换盘安装也不失效）", abs.length === 0, `${abs.length} 条绝对路径`);
+    } catch (e) {
+      check("语言包模板可解析", false, String(e.message));
+    }
+  } else {
+    check("首启动语言包模板在场", false);
+  }
+
   /* ---- 7. checksums 必须与实际文件一致 ---- */
   //
   // 不写「至少 4 项」这种门槛：上游 `build/gulpfile.vscode.js` 里是固定的

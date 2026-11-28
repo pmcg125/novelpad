@@ -228,6 +228,27 @@ jobs:
       - name: 塞入 NovelPad 扩展
         run: node shell/scripts/embed-extension.mjs "${{ matrix.out }}/resources/app" novelpad.vsix
 
+      # 中文语言包：作者是中文写作者，菜单不该叫 File / Edit。
+      # 语言包不进 upstream 源码，所以要在这里单独塞进 resources/app/extensions。
+      # 下载带 sha256 校验——包是第三方产物，内容变了必须当场红。
+      - name: 取中文语言包
+        run: node shell/scripts/fetch-language-pack.mjs .langpack
+
+      - name: 内置中文语言包
+        run: |
+          node shell/scripts/embed-language-pack.mjs \
+            "${{ matrix.out }}/resources/app" \
+            .langpack/vscode-language-pack-zh-hans-1.85.0.vsix \
+            --locale zh-cn
+
+      # 三件「只能靠真跑发现」的默认值：信任关闭 / 默认中文 / 首启动补
+      # languagepacks.json。判据自检也跑一遍，防止守卫自己写错。
+      - name: 壳默认值自检判据
+        run: node shell/scripts/verify-shell-defaults-selftest.mjs "${{ matrix.out }}/resources/app"
+
+      - name: 检查壳默认值
+        run: node shell/scripts/verify-shell-defaults.mjs "${{ matrix.out }}/resources/app"
+
       - name: 打包
         shell: bash
         run: |
@@ -285,6 +306,12 @@ jobs:
           path: upstream
           fetch-depth: 1
       - run: node shell/scripts/apply.mjs upstream
+
+      # 003 的三处默认值：信任关闭 / 默认中文 / 首启动补 languagepacks.json。
+      # 单独验一次，因为它的失败方式很隐蔽：apply 能成功，但改错了位置，
+      # 只有在真机上才会表现为「界面还是英文」。
+      - name: 验证壳默认值补丁
+        run: node shell/scripts/verify-patch-003.mjs
 
       # 内置扩展链路：解压与分析完全在纯 JS 里做。
       # 之前用 `tar -xf` 解 vsix，Windows 的 bsdtar 能读 zip，Linux 的 GNU tar 不能，

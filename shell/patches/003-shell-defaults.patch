@@ -1,0 +1,122 @@
+diff --git a/src/main.js b/src/main.js
+index 7087474..f43c630 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -35,6 +35,10 @@ bootstrap.enableASARSupport();
+ 
+ const args = parseCLIArgs();
+ // Configure static command line arguments
++// NovelPad：首启动补齐 argv.json 与 languagepacks.json。
++// 必须早于下一行——它内部会读 argv.json；读不到就回退英文。
++ensureNovelPadBootstrapSync();
++
+ const argvConfig = configureCommandlineSwitchesSync(args);
+ // Enable sandbox globally unless
+ // 1) disabled via command line using either
+@@ -115,6 +119,74 @@ registerListeners();
+  */
+ let nlsConfigurationPromise = undefined;
+ 
++/**
++ * NovelPad：首启动补齐 argv.json 的 locale 与 languagepacks.json。
++ *
++ * 上游有两处「读的时候文件还不存在」，而且都发生在 app ready 之前：
++ *
++ *   argv.json          readArgvConfigSync() 在 ENOENT 时生成却不回填，
++ *                      返回 {} → locale=undefined → 界面英文
++ *   languagepacks.json 由工作台启动后扫描扩展才写，首启动时不存在
++ *                      → 界面英文（第二次启动才读到上一轮写的）
++ *
++ * 实测：删掉 argv.json 全新启动 → 全英文；两份都预置 → 8/8 中文菜单。
++ * 「装完打开是英文，关掉再开才中文」不能当成品发，所以在这里补。
++ *
++ * userDataPath 在这一步还没声明（第 57 行），但 getUserDataPath 第 23 行
++ * 就已经 require 了。这里用同样的函数与参数算一次，结果与第 57 行一致。
++ *
++ * 只补缺失，绝不覆盖：argv.json 已存在就一个字都不动（作者可能把 locale
++ * 改成了 en），languagepacks.json 已存在也不动。
++ */
++function ensureNovelPadBootstrapSync() {
++	try {
++		// ---- 1. argv.json：默认中文界面 ----
++		const argvFile = getArgvConfigPath();
++		if (!fs.existsSync(argvFile)) {
++			const dir = path.dirname(argvFile);
++			if (!fs.existsSync(dir)) {
++				fs.mkdirSync(dir, { recursive: true });
++			}
++			fs.writeFileSync(argvFile, [
++				'// NovelPad 的启动参数（自动生成，可手工编辑）',
++				'{',
++				'\t// 界面语言：中文。改成 "en" 用英文；整行删掉则跟随系统。',
++				'\t"locale": "zh-cn"',
++				'}',
++				''
++			].join('\n'));
++		}
++
++		// ---- 2. languagepacks.json：让主进程能解析语言包 ----
++		const userDataPath = getUserDataPath(args, product.nameShort ?? 'code-oss-dev');
++		const targetFile = path.join(userDataPath, 'languagepacks.json');
++		if (fs.existsSync(targetFile)) {
++			return;
++		}
++		const appRoot = path.join(__dirname, '..');
++		const templateFile = path.join(appRoot, 'novelpad-languagepack.json');
++		if (!fs.existsSync(templateFile)) {
++			// 不是 NovelPad 的壳，或构建时没塞语言包。保持英文，不报错。
++			return;
++		}
++		const template = JSON.parse(fs.readFileSync(templateFile).toString());
++		const resolved = {};
++		for (const localeId of Object.keys(template)) {
++			const pack = template[localeId];
++			const translations = {};
++			for (const id of Object.keys(pack.translations || {})) {
++				translations[id] = path.join(appRoot, pack.translations[id]);
++			}
++			resolved[localeId] = Object.assign({}, pack, { translations });
++		}
++		fs.mkdirSync(userDataPath, { recursive: true });
++		fs.writeFileSync(targetFile, JSON.stringify(resolved));
++	} catch (error) {
++		// 补不上就退回英文界面，不该阻断启动。
++		console.warn(`[novelpad] bootstrap failed (${error})`);
++	}
++}
++
+ /**
+  * @type {String}
+  **/
+@@ -344,6 +416,9 @@ function createDefaultArgvConfigSync(argvConfigPath) {
+ 			'//',
+ 			'// NOTE: Changing this file requires a restart of VS Code.',
+ 			'{',
++			'	// 界面语言：中文。改成 "en" 用英文；整行删掉则跟随系统。',
++			'	"locale": "zh-cn",',
++			'',
+ 			'	// Use software rendering instead of hardware accelerated rendering.',
+ 			'	// This can help in cases where you see rendering issues in VS Code.',
+ 			'	// "disable-hardware-acceleration": true',
+diff --git a/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts b/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts
+index 864a19e..4c1af78 100644
+--- a/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts
++++ b/src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts
+@@ -728,7 +728,16 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
+ 		properties: {
+ 			[WORKSPACE_TRUST_ENABLED]: {
+ 				type: 'boolean',
+-				default: true,
++				// NovelPad：默认关闭「工作区信任」。
++				//
++				// 作者的稿件是 Markdown，不是可执行代码，问「我是否信任这些
++				// 文件的作者」对写作软件没有意义。更糟的是在作者按下「信任」
++				// 之前整个扩展都不激活——主题、书房、侧栏一概没有，内置 git
++				// 扩展也被禁用（版本管理直接失效）。新用户第一眼看到的会是
++				// 一个安全警告，而不是书房。
++				//
++				// 只改壳的默认值：装到标准 VS Code 里的同一份扩展不受影响。
++				default: false,
+ 				description: localize('workspace.trust.description', "Controls whether or not Workspace Trust is enabled within VS Code."),
+ 				tags: [WORKSPACE_TRUST_SETTING_TAG],
+ 				scope: ConfigurationScope.APPLICATION,

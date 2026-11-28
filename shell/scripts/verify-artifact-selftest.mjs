@@ -76,6 +76,37 @@ function goodFiles({ root = "", brandRoot = false } = {}) {
       data: Buffer.alloc(64, 0x77),
     });
   }
+  // 中文语言包：目录名必须等于 manifest.name，主翻译文件要够大
+  files.push({
+    name: `${prefix}resources/app/extensions/vscode-language-pack-zh-hans/package.json`,
+    data: JSON.stringify({
+      name: "vscode-language-pack-zh-hans",
+      publisher: "MS-CEINTL",
+      version: "1.85.0",
+      contributes: { localizations: [{ languageId: "zh-cn", languageName: "Chinese Simplified" }] },
+    }),
+  });
+  files.push({
+    name: `${prefix}resources/app/extensions/vscode-language-pack-zh-hans/translations/main.i18n.json`,
+    data: Buffer.alloc(600 * 1024, 0x7b),
+  });
+  // 首启动模板：翻译路径必须相对（绝对路径换盘安装后全失效）
+  files.push({
+    name: `${prefix}resources/app/novelpad-languagepack.json`,
+    data: JSON.stringify({
+      "zh-cn": {
+        hash: "a".repeat(32),
+        extensions: [{ extensionIdentifier: { id: "ms-ceintl.vscode-language-pack-zh-hans" }, version: "1.85.0" }],
+        translations: Object.fromEntries(
+          Array.from({ length: 88 }, (_, i) => [
+            i === 0 ? "vscode" : `vscode.k${i}`,
+            `extensions/vscode-language-pack-zh-hans/translations/${i === 0 ? "main" : `extensions/k${i}`}.i18n.json`,
+          ]),
+        ),
+        label: "中文(简体)",
+      },
+    }),
+  });
   // 条目数 > 500：加一批无关但真实存在的文件
   for (let i = 0; i < 400; i++) {
     files.push({ name: `${prefix}resources/app/out/vs/filler/f${i}.js`, data: Buffer.from("x") });
